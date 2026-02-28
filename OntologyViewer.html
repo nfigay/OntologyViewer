@@ -1,0 +1,2825 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OWL Validation</title>
+    <link rel="stylesheet" type="text/css" href="css/w2ui-2.0.min.css">
+    <link rel="stylesheet" href="css/backdrop.css">
+    <link rel="stylesheet" href="css/all.min.css" />
+    <script src="js/cytoscape/OntologyViewerStyle.js"></script>
+    <script src="lib/rdflib.min.js"></script>
+    <script src="lib/uuid.min.js"></script>
+    <script src="lib/index.umd.js"></script>
+    <script src="lib/cytoscape.min.js"></script>
+    <script src="lib/layout-base.js"></script>
+    <script src="lib/cose-base.js"></script>
+    <script src="lib/cytoscape-fcose.js"></script>
+    <script src="lib/cytoscape-undo-redo.js"></script>
+    <script src="lib/cytoscape-expand-collapse.js"></script>
+    <script src="lib/popper.js"></script>
+    <script src="lib/cytoscape-popper.min.js"></script>
+    <script src="lib/tippy-bundle.iife.js"></script>
+    <script src="lib/w2ui-2.0.min.js"></script>
+    <script src="lib/layout-base.js"></script>
+    <script src="lib/cola.min.js"></script>
+    <script src="lib/cytoscape-cola.js"></script>
+    <!-- Dagre.js (Required for cytoscape-dagre) -->
+    <script src="lib/dagre.min.js"></script>
+    <!-- Cytoscape-Dagre Extension -->
+    <script src="lib/cytoscape-dagre.js"></script>
+    <script src="lib/i18next.min.js"></script>
+
+
+    <style>
+        /* colors for protege
+        annotation: 209 122 9 #D17A09
+        class: 209 165 0 #D1A500
+        Objecttype Property :0 121 186 #0079BA
+        Datatype Property: 56 161 74 #38A14A
+        Datatype 173 59 69 #AD3B45
+        Individuals 135 75 130 #874B82
+
+          /* Tab styling */
+
+        .tab-container {
+            width: 100%;
+            height: 50px;
+            display: flex;
+            border-bottom: 2px solid #ccc;
+            margin-bottom: 10px;
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            background-color: #f4f4f4;
+            margin-right: 5px;
+            width: 98%;
+        }
+
+        .tab.active {
+            background-color: white;
+            border-top: 2px solid #007bff;
+            font-weight: bold;
+            width: 98%;
+        }
+
+        /* Hide non-active content */
+        .tab-content {
+            display: none;
+
+        }
+
+        .tab-content.active {
+            display: block;
+            width: 100%;
+        }
+
+        /* Style for select boxes */
+        select {
+            width: 100%;
+            height: 150px;
+            margin-top: 5px;
+        }
+
+        /* Hide the native file input */
+        #fileInput,
+        #fileInput2 {
+            display: none;
+        }
+
+
+        #cy {
+            width: 100%;
+            height: 100%;
+        }
+
+        #infoPanel {
+            border: 0px solid black;
+            padding: 10px;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            background-color: #f9f9f9;
+            overflow: auto;
+            /* Enables both horizontal and vertical scrolling */
+            white-space: nowrap;
+            /* Prevents text from wrapping to the next line */
+            word-wrap: break-word;
+            /* Allows long words to break and not overflow */
+            display: none;
+        }
+
+        #infoPanel h3 {
+            margin-top: 0;
+        }
+    </style>
+    <script>
+        window.addEventListener('beforeunload', function (event) {
+            // Cancel the event to trigger the confirmation dialog
+            event.preventDefault();
+
+            // Setting event.returnValue triggers the browser's confirmation dialog
+            event.returnValue = 'Are you sure you want to leave? You may have unsaved changes.';
+
+            // Note: The text inside event.returnValue will not be shown in modern browsers;
+            // the browser will display a standard message instead.
+        });
+    </script>
+</head>
+
+<body>
+
+    <div id="app" style="width: 100%; height: 100vh;">
+        <div id="mainLayout" style="height: calc(100% - 10px);" />
+    </div>
+    <div class="tab-container" id="tabs"></div>
+    <div style="height: 100px;" id="output" style="display: block;"></div>
+
+    <input type="file" name="name" id="inputfile" style="display:none" />
+    <input type="file" name="name" id="inputinferred" style="display:none" />
+    <input type="file" name="name" id="load-from-inp" style="display:none" />
+    <script type="module">
+        var mainMenu;
+        var tripleTabs;
+        var removed;
+
+        // Define tab structure dynamically
+        const tabsData = [
+            "triples",
+            "classes",
+            "classEquivalence",
+            "objectProperties",
+            "dataProperties",
+            "namedIndividuals",
+            "isaRelations",
+            "classSubsumption",
+            "propertySubsumption",
+            "propertyEquivalence",
+            "propertyInverse",
+            "individualRelations",
+            "domains",
+            "ranges"
+        ];
+        const resources = {
+            en: {
+                translation: {
+                    tabs: {
+                        triplesTab: "Triples",
+                        classesTab: "Classes",
+                        classEquivalenceTab: "Equivalence Classes",
+                        objectPropertiesTab: "Obj. Properties",
+                        dataPropertiesTab: "Data Properties",
+                        namedIndividualsTab: "Individuals",
+                        isaRelationsTab: "Individual Typing",
+                        classSubsumptionTab: "Class Subsumption",
+                        propertySubsumptionTab: "Property Subsumption",
+                        propertyEquivalenceTab: "Property Equivalence",
+                        propertyInverseTab: "Inverse Properties",
+                        individualRelationsTab: "Individual Relations",
+                        domainsTab: "Domains",
+                        rangesTab: "Ranges",
+                        triplesLabel: "Triplets trouvés",
+                        classesLabel: "Found OWL Classes",
+                        classEquivalenceLabel: "Equivalence classes between properties",
+                        objectPropertiesLabel: "Found object properties",
+                        dataPropertiesLabel: "Found datatype properties",
+                        namedIndividualsLabel: "Found NamedIndividuals",
+                        isaRelationsLabel: "Individuals typring Relations",
+                        classSubsumptionLabel: "Classes subsumption relations",
+                        propertySubsumptionLabel: "Properties subsumption relations",
+                        propertyEquivalenceLabel: "Properties equivalence relations",
+                        propertyInverseLabel: "Properties inverse relations",
+                        individualRelationsLabel: "Relations between individuals",
+                        domainsLabel: "Domain declarations",
+                        rangesLabel: "Tange declarations",
+                    },
+                    menu: {
+                        language: "Language",
+                        fr: "🇫🇷 French",
+                        en: "🇬🇧 English",
+                        owl: "OWL File",
+                        open: "Open",
+                        importinferred: "Import inferred axioms as ontology",
+                        savegraph: "Save Graph",
+                        loadgraph: "Load Graph",
+                        exportjson: "Export Json",
+                        expandCollapse: "Expand/Collapse",
+                        nodes: "Nodes",
+                        expandAllNodes: "Expand All",
+                        collapseAllNodes: "Collapse All",
+                        expandSelectedNodes: "Expand Selected",
+                        collapseSelectedNodes: "Collapse Selected",
+                        expandSelectedNodesRecursively: "Expand Selected Recursively",
+                        collapseSelectedNodesRecursively: "Collapse Selected Recursively",
+                        edges: "Edges",
+                        expandAllEdges: "Expand All",
+                        collapseAllEdges: "Collapse All",
+                        expandSelectedEdges: "Expand Selected",
+                        collapseSelectedEdges: "Collapse Selected",
+                        collapseEdgesBetweenNodes: "Reduce Between Selected Nodes",
+                        expandEdgesBetweenNodes: "Expand Between Selected Nodes",
+                        rendering: "Rendering",
+                        renderingnodeirishortname: "Render by Entity IRI Short Name(id)",
+                        noderenderinglabel: "Render by Label(RDFS Label)",
+                        noderenderingprefix: "Render by prefixed name",
+                        noderenderingannotation: "Render by annotation property",
+                        noderenderingcustom: "Customed rendering",
+                        edgeirishortName: "Render by Property IRI Short Name(id)",
+                        edgerenderingprefixName: "Render by prefixed name",
+                        edgerenderinglabel: "Render by Label(RDFS Label)",
+                        edgerenderingannotationProperty: "Render by annotation property",
+                        edgerenderingcustom: "Customed rendering",
+                        label: "Label",
+                        prefixName: "Prefix Name",
+                        annotationProperty: "Annotation Property",
+                        customRendering: "Custom Rendering",
+                        display: "Display",
+                        showowlconstructs: "Show OWL Constructs Nodes",
+                        showisa: "Show isa as link",
+                        showdomainrange: "Show domain and range as nodes",
+                        showlabelasnode: "Show labels as nodes",
+                        showlabelasedge: "Show labels as edges",
+                        showannotationasnode: "Show annotations as nodes",
+                        showannotationasedge: "Show annotations as edges",
+                        viewpoint: "Viewpoints",
+                        individual: "Individuals",
+                        ontology: "Ontologies",
+                        sop: "Subject Object Properties",
+                        data: "Data",
+                        layout: "Layouts",
+                        fcose: "Fcose",
+                        grid: "Grid",
+                        circle: "Circle",
+                        cose: "Cose",
+                        breadthfirst: "Breadthfirst",
+                        concentric: "Concentric",
+                        random: "Random",
+                        cola: "Cola",
+                        dagre: "Dagre",
+                        showhidegrabifydelete: "Actions on graph elements",
+                        showhide: "Show/Hide",
+                        hideselected: "Hide Selected",
+                        hidenonselected: "Hide Non Selected",
+                        unhideall: "Unhide All",
+                        grabifyungrabify: "Grabify/Ungrabify",
+                        ungrabifyselected: "Ungrabify Selected",
+                        ungrabifynonselected: "Ungrabify Non Selected",
+                        grabifyselected: "Grabify Selected",
+                        grabifynonselect: "Grabify Non Selected",
+                        lockunlock: "Lock/Unlock",
+                        lockselected: "Lock Selected",
+                        locknonselected: "Lock Non Selected",
+                        unlockselected: "Unlock Selected",
+                        unlocknonselect: "Unlock Non Select",
+                        removerestore: "Remove Restore",
+                        removeselected: "Remove Selected",
+                        removeunselected: "Remove Unselected",
+                        removeall: "Remove All",
+                        restore: "Restore"
+                    },
+                    confirm: {
+                        replacegraph: "Do you want to replace the current graph? If yes, current graph will be removed, if no, it will be merged with the import.",
+                        rdfinplaceofowl: "Do you want to show RDF triples in place of OWL?"
+                    },
+                    alert: {
+                        selectowlinferred: "Please select the inferred OWL File",
+                        selectowl: "Please select you OWL File"
+                    }
+                }
+            },
+            fr: {
+                translation: {
+                    tabs: {
+                        triplesTab: "Triplets",
+                        classesTab: "Classes",
+                        classEquivalenceTab: "Équivalence Classes",
+                        objectPropertiesTab: "Propriétés Obj.",
+                        dataPropertiesTab: "Propriétés Données",
+                        namedIndividualsTab: "Individus",
+                        isaRelationsTab: "Typage Individus",
+                        classSubsumptionTab: "Subsomption Classes",
+                        propertySubsumptionTab: "Subsomption Prop.",
+                        propertyEquivalenceTab: "Équivalence Prop.",
+                        propertyInverseTab: "Propriétés Inverses",
+                        individualRelationsTab: "Relations Individus",
+                        domainsTab: "Domaines",
+                        rangesTab: "Portées",
+                        triplesLabel: "Found triples",
+                        classesLabel: "Classes OWL trouvées",
+                        classEquivalenceLabel: "Classes d'équivalence entre propriétés",
+                        objectPropertiesLabel: "Propriétés de type objet trouvées",
+                        dataPropertiesLabel: "Propriétés de type données trouvées",
+                        namedIndividualsLabel: "Individus nommés OWL trouvés",
+                        isaRelationsLabel: "Relations de typage d'individus",
+                        classSubsumptionLabel: "Relations de subsomption entre classes",
+                        propertySubsumptionLabel: "Relations de subsomption entre propriétés",
+                        propertyEquivalenceLabel: "Relations d'équivalence entre propriétés",
+                        propertyInverseLabel: "Relations inverses entre propriétés",
+                        individualRelationsLabel: "Relations entre individus",
+                        domainsLabel: "Déclarations de domaines",
+                        rangesLabel: "Déclarations de portées",
+
+                    },
+                    menu: {
+                        language: "Langage",
+                        fr: "🇫🇷 Français",
+                        en: "🇬🇧 English",
+                        owl: "Fichier OWL",
+                        open: "Ouvrir",
+                        importinferred: "Import des axiomes inférré de l'ontologie",
+                        savegraph: "Sauve Graphe",
+                        loadgraph: "Charge Graphe",
+                        exportjson: "Exporte Json",
+                        expandCollapse: "Développer/Réduire",
+                        nodes: "Nœuds",
+                        expandAllNodes: "Tout développer",
+                        collapseAllNodes: "Tout réduire",
+                        expandSelectedNodes: "Développer sélectionnés",
+                        collapseSelectedNodes: "Réduire sélectionnés",
+                        expandSelectedNodesRecursively: "Développer sélectionnés récursivement",
+                        collapseSelectedNodesRecursively: "Réduire sélectionnés récursivement",
+                        edges: "Arêtes",
+                        expandAllEdges: "Tout développer",
+                        collapseAllEdges: "Tout réduire",
+                        expandSelectedEdges: "Développer sélectionnés",
+                        collapseSelectedEdges: "Réduire sélectionnés",
+                        collapseEdgesBetweenNodes: "Réduire entre les noeuds sélectionnés",
+                        expandEdgesBetweenNodes: "Développer entre les noeuds sélectionnés",
+                        rendering: "Rendu",
+                        renderingnodeirishortname: "Nom court IRI",
+                        label: "Étiquette",
+                        prefixName: "Nom du préfixe",
+                        annotationProperty: "Propriété d’annotation",
+                        customRendering: "Rendu personnalisé",
+                        display: "Affichage",
+                        showowlconstructs: "... des nœuds OWL",
+                        showisa: "... de 'isa' comme lien",
+                        showdomainrange: "... des domaines et portées comme nœuds",
+                        showlabelasnode: "... des labels comme noeuds",
+                        showlabelasedge: "... des labels comme liens",
+                        showannotationasnode: "... des annotations comme noeuds",
+                        showannotationasedge: "... des annotations comme liens",
+                        viewpoint: "Points de vue",
+                        individual: "Individus",
+                        ontology: "Ontologies",
+                        sop: "Propriétés sujet-objet",
+                        data: "Données",
+                        layout: "Mises en page",
+                        fcose: "Fcose",
+                        grid: "Grille",
+                        circle: "Cercle",
+                        cose: "Cose",
+                        breadthfirst: "Parcours en largeur",
+                        concentric: "Concentrique",
+                        random: "Aléatoire",
+                        cola: "Cola",
+                        dagre: "Dagre",
+                        showhidegrabifydelete: "Actions sur éléments du graphe",
+                        showhide: "Montrer/Cacher",
+                        hideselected: "Cacher les sélectionnés",
+                        hidenonselected: "Cacher les non sélectionnés",
+                        unhideall: "Révéler tout",
+                        grabifyungrabify: "Activer/Désactiver la prise",
+                        ungrabifyselected: "Libérer la sélection",
+                        ungrabifynonselected: "Libérer les non sélectionnés",
+                        grabifyselected: "Prendre la sélection",
+                        grabifynonselect: "Prendre les non sélectionnés",
+                        lockunlock: "Verrouiller/Déverrouiller",
+                        lockselected: "Verrouiller la sélection",
+                        locknonselected: "Verrouiller les non sélectionnés",
+                        unlockselected: "Déverrouiller la sélection",
+                        unlocknonselect: "Déverrouiller les non sélectionnés",
+                        removerestore: "Supprimer/Restaurer",
+                        removeselected: "Supprimer la sélection",
+                        removeunselected: "Supprimer les non sélectionnés",
+                        removeall: "Tout supprimer",
+                        restore: "Restaurer",
+                        rendering: "Rendu",
+                        renderingnodeirishortname: "Rendu par Nom Court de l'IRI de l'Entité (id)",
+                        noderenderinglabel: "Rendu par Libellé (RDFS Label)",
+                        noderenderingprefix: "Rendu par Nom Préfixé",
+                        noderenderingannotation: "Rendu par Propriété d'Annotation",
+                        noderenderingcustom: "Rendu Personnalisé",
+                        edgeirishortName: "Rendu par Nom Court de l'IRI de la Propriété (id)",
+                        edgerenderingprefixName: "Rendu par Nom Préfixé",
+                        edgerenderinglabel: "Rendu par Libellé (RDFS Label)",
+                        edgerenderingannotationProperty: "Rendu par Propriété d'Annotation",
+                        edgerenderingcustom: "Rendu Personnalisé"
+                    },
+                    confirm: {
+                        replacegraph: "Voulez vous remplacer le graphe courant? Sinon l'import sera fusionné avec le graphe courant.",
+                        rdfinplaceofowl: "Voulez vous visualizer le graphe RDF au lien de l'ontologie OWL?   "
+                    }
+                    ,
+                    alert: {
+                        selectowlinferred: "Veuillez sélectionner le fichier OWL inferred.",
+                        selectowl: "Veuillez sélectionner un fichier OWL."
+                    }
+                }
+            }
+        };
+
+        function serializeDomainHash(hash) {
+            return JSON.stringify(
+                Object.fromEntries(
+                    Object.entries(hash).map(([key, valueSet]) => [key, Array.from(valueSet)])
+                )
+            );
+        }
+
+        function deserializeDomainHash(json) {
+            const parsed = JSON.parse(json);
+            return Object.fromEntries(
+                Object.entries(parsed).map(([key, valueArray]) => [key, new Set(valueArray)])
+            );
+        }
+
+        function serializeRangeHash(hash) {
+            return JSON.stringify(
+                Object.fromEntries(
+                    Object.entries(hash).map(([key, valueSet]) => [key, Array.from(valueSet)])
+                )
+            );
+        }
+
+        function deserializeRangeHash(json) {
+            const parsed = JSON.parse(json);
+            return Object.fromEntries(
+                Object.entries(parsed).map(([key, valueArray]) => [key, new Set(valueArray)])
+            );
+        }
+
+        // Créer les arêtes temporaires à partir de domains/ranges
+        function showTemporaryDomainRangeEdges(node, cy) {
+            const propertyId = node.id();
+            const data = node.data();
+            const domains = data.domains ? JSON.parse(data.domains) : [];
+            const ranges = data.ranges ? JSON.parse(data.ranges) : [];
+
+            const elementsToAdd = [];
+
+            // Créer une arête pour chaque domaine
+            domains.forEach(domainId => {
+                if (cy.getElementById(domainId).nonempty()) {
+                    elementsToAdd.push({
+                        group: 'edges',
+                        data: {
+                            id: `${propertyId}_domain_${domainId}_tmp`,
+                            source: propertyId,
+                            target: domainId,
+                            label: 'domain',
+                            temporary: true
+                        },
+                        classes: 'domain'
+                    });
+                }
+            });
+
+            // Créer une arête pour chaque range
+            ranges.forEach(rangeId => {
+                if (cy.getElementById(rangeId).nonempty()) {
+                    elementsToAdd.push({
+                        group: 'edges',
+                        data: {
+                            id: `${propertyId}_range_${rangeId}_tmp`,
+                            source: propertyId,
+                            target: rangeId,
+                            label: 'range',
+                            temporary: true
+                        } ,
+                        classes: 'range'
+                    });
+                }
+            });
+            cy.add(elementsToAdd);
+        }
+
+        // Supprimer les arêtes temporaires
+        function removeTemporaryEdges(cy) {
+            cy.edges('[temporary]').remove();
+        }
+
+
+        function updatePropertyNodesWithExistingDomainsAndRangesInGraph(cy, domainHash, rangeHash) {
+            cy.nodes().forEach(node => {
+                const data = node.data();
+                const propertyId = data.id;
+
+                const domainsSet = domainHash[propertyId];
+                const rangesSet = rangeHash[propertyId];
+
+                const domainsInGraph = [];
+                const rangesInGraph = [];
+
+                // Vérifier que les classes du domaine existent dans le graphe
+                if (domainsSet) {
+                    for (const classId of domainsSet) {
+                        if (cy.getElementById(classId).nonempty()) {
+                            domainsInGraph.push(classId);
+                        }
+                    }
+                }
+
+                // Vérifier que les classes du range existent dans le graphe
+                if (rangesSet) {
+                    for (const classId of rangesSet) {
+                        if (cy.getElementById(classId).nonempty()) {
+                            rangesInGraph.push(classId);
+                        }
+                    }
+                }
+
+                // Mise à jour des données si au moins un domaine ou range est valide
+                const newData = {};
+                if (domainsInGraph.length > 0) {
+                    newData.domains = JSON.stringify(domainsInGraph);
+                }
+                if (rangesInGraph.length > 0) {
+                    newData.ranges = JSON.stringify(rangesInGraph);
+                }
+
+                if (Object.keys(newData).length > 0) {
+                    node.data(newData);
+                }
+            });
+        }
+
+
+
+        function doElemsMultiTypes(elems) {
+            const classDict = {};
+            for (let i = 0; i < elems.length; i++) {
+                classDict[elems[i].data('edgeType')] = true;
+            }
+            return Object.keys(classDict).length > 1;
+        }
+        function exportVisibleGraphToFile(cy) {
+            let graphData = [];
+
+            // Extract visible nodes
+            cy.nodes(':visible').forEach(node => {
+                let nodeData = {
+                    data: {
+                        id: node.id(),
+                        label: node.data('label'),
+                    }
+                };
+
+                let parent = node.parent();
+                if (parent.length > 0) {
+                    nodeData.data.parent = parent.id();
+                }
+
+                let classes = node.classes();
+                if (classes) {
+                    nodeData.classes = classes;
+                }
+
+                graphData.push(nodeData);
+            });
+
+            // Extract visible edges
+            cy.edges(':visible').forEach(edge => {
+                let edgeData = {
+                    data: {
+                        id: edge.id(),
+                        source: edge.source().id(),
+                        target: edge.target().id(),
+                        label: edge.data('label'),
+                        type: edge.data('type')
+                    },
+                    classes: edge.classes() // Récupération directe des classes existantes
+                };
+
+                let edgeType = edge.data('edgeType');
+                if (edgeType) {
+                    edgeData.data.edgeType = edgeType;
+                }
+
+                graphData.push(edgeData);
+            });
+
+
+            // Convertir en JSON et créer un Blob
+            let jsonString = JSON.stringify(graphData, null, 2);
+            let blob = new Blob([jsonString], { type: "application/json" });
+
+            // Créer un lien de téléchargement
+            let a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            var filename = "owl.json"
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+
+        i18next.init({
+            lng: "fr", // Default language
+            fallbackLng: "en", // Fallback language
+            resources: resources // Use in-memory translations
+        })
+        function changeLanguage(lang) {
+            i18next.changeLanguage(lang, () => {
+                updateToolbarTranslations();
+                updateTabsTranslations();
+            });
+        }
+
+        const outputDiv = document.getElementById("output");
+
+        if (outputDiv) {
+            tabsData.forEach(key => {
+                const tabDiv = document.createElement("div");
+                tabDiv.id = `${key}Tab`;
+                tabDiv.className = "tab-content";
+
+                const label = document.createElement("label");
+                label.htmlFor = `${key}Select`;
+                label.textContent = i18next.t(`tabs.${key}Label`) + " :";
+
+                const select = document.createElement("select");
+                select.id = `${key}Select`;
+                select.size = 10;
+                select.multiple = true;
+
+                tabDiv.appendChild(label);
+                tabDiv.appendChild(select);
+                outputDiv.appendChild(tabDiv);
+            });
+        } else {
+            console.error("L'élément #output n'existe pas dans le DOM !");
+        }
+
+
+
+        function updateMenu() {
+            w2ui.mainMenu.items.forEach(item => {
+                item.text = i18next.t(item.text); // Translate
+            });
+            w2ui.mainMenu.refresh(); // Refresh UI
+        }
+
+        function addNewMenuItem() {
+
+            mainMenu.items.push({
+                type: "button",
+                id: "newItem",
+                text: i18next.t("menu.newItem"),
+                icon: "fa fa-star"
+            });
+
+            mainMenu.refresh();
+            updateToolbarTranslations(); // Ensure default language is applied to menu items  
+
+        }
+
+        function updateTabsTranslations() {
+            tripleTabs.tabs.forEach(tab => {
+                var myLabel = tab.id + "Tab"
+                if (myLabel in i18next.t("tabs", { returnObjects: true })) {
+                    tab.text = i18next.t(`tabs.${myLabel}`);
+                }
+                var myLabel = tab.id + "Label"
+                const label = document.querySelector(`label[for="${tab.id}Select"]`);
+                if (label) {
+
+                    if (myLabel in i18next.t("tabs", { returnObjects: true })) {
+                        label.textContent = i18next.t(`tabs.${myLabel}`) + " :";
+                    }
+                }
+            });
+            tripleTabs.refresh(); // Apply the changes
+        }
+
+
+        function updateToolbarTranslations() {
+            mainMenu.items.forEach(item => {
+
+                if (item.id in i18next.t("menu", { returnObjects: true })) {
+                    item.text = i18next.t(`menu.${item.id}`);
+                    //  console.log(item.id)
+                    // console.log(item.id + " -> " + item.text)
+                    if (item.items) {
+                        item.items.forEach(subItem => {
+                            if (subItem.id in i18next.t("menu", { returnObjects: true })) {
+                                subItem.text = i18next.t(`menu.${subItem.id}`);
+                            }
+                            // console.log(subItem.id + " -> " + subItem.text)
+                            if (subItem.items) {
+                                subItem.items.forEach(subSubItem => {
+                                    if (subSubItem.id in i18next.t("menu", { returnObjects: true })) {
+                                        subSubItem.text = i18next.t(`menu.${subSubItem.id}`);
+                                    }
+                                    //  console.log(subSubItem.id + " -> " + subSubItem.text)
+                                });
+                            }
+                        });
+                    }
+                }
+
+            });
+
+            mainMenu.refresh(); // Apply the changes
+        }
+
+        var groupEdges = true;
+        var allowNestedEdgeCollapse = true;
+        function getEdgeOptions() {
+            var groupEdgesOfSameTypeOnCollapse = groupEdges;
+            var allowNestedEdgeCollapse = allowNestedEdgeCollapse;
+
+            return { groupEdgesOfSameTypeOnCollapse: groupEdgesOfSameTypeOnCollapse, allowNestedEdgeCollapse: allowNestedEdgeCollapse };
+        }
+
+        function initializeTripleTabs() {
+            if (w2ui.tabs) return; // Prevent multiple initializations
+
+            // Create W2UI tabs dynamically
+            var tabsConfig = {
+                name: 'tabs',
+                active: 'classesTab', // Default active tab
+                tabs: tabsData.map(id => ({
+                    id,
+                    text: i18next.t(`tabs.${id}Tab`) // Translate tab label
+                })),
+                onClick(event) {
+                    handleTabsAction(event) //show the tabSelect of the selected tab
+                }
+
+            }
+            console.log(tabsConfig)
+            tripleTabs = new w2tabs(tabsConfig)
+            return tripleTabs;
+        }
+
+        const script = document.createElement("script");
+        script.src = "lib/cytoscape-cola.js";
+        script.onload = function () {
+            console.log("Cytoscape-Cola loaded successfully");
+            cytoscape.use(cytoscapeCola);
+        };
+        document.head.appendChild(script);
+
+        const script2 = document.createElement("script");
+        script2.src = "lib/cytoscape-dagre.js";
+        script2.onload = function () {
+            console.log("Cytoscape-Dagre loaded successfully");
+            cytoscape.use(cytoscapeDagre);
+        };
+
+        document.head.appendChild(script2);
+        function applyDagreLayout(rankDir = 'TB') { // Default to 'Top-Bottom'
+            let layout = cy.layout({
+                name: 'dagre',
+                rankDir: rankDir, // Accepts 'TB' (top-bottom), 'LR' (left-right), etc.
+                animate: true
+            });
+
+            layout.run(); // Apply layout
+        }
+
+        var groupEdges = true;
+        var allowNestedEdgeCollapse = true;
+        var reader;
+        // Extract short name from URI
+        function getShortName(uri) {
+            return uri.includes('#') ? uri.split('#').pop() : uri.split('/').pop();
+        }
+
+        // Function to toggle the icon between checked and unchecked states
+
+        function toggleIcon(itemId) {
+            let item = w2ui.toolbar.get(itemId);
+            let newIcon = item.icon === 'fa fa-square' ? 'fa fa-check-square' : 'fa fa-square'; // Toggle between square and check-square
+
+            // Update the item with the new icon
+            w2ui.toolbar.set(itemId, { icon: newIcon });
+        }
+        // Fonction pour changer le layout
+        function changeLayout(layoutName) {
+            cy.layout({ name: layoutName, animate: true, fit: true, padding: 10 }).run();
+        }
+
+        // Function for reading files - will be updated with a more sophisticated one
+        function readTxtFile(file, cb) {
+            const fileReader = new FileReader();
+            fileReader.onload = () => {
+                try {
+                    cb(fileReader.result);
+                } catch (error) {
+                    logger.error('Given file is not suitable.', error);
+                }
+            };
+            fileReader.onerror = (error) => {
+                logger.error('File could not be read!', error);
+                fileReader.abort();
+            };
+            fileReader.readAsText(file);
+        }
+
+        //        
+        function loadRDF(file, inferred = false) {
+            alert(inferred)
+            if (!file) {
+                if (inferred) {
+                    alert(i18next.t(alert.selectowlinferred));
+
+
+                } else {
+                    alert(i18next.t(alert.selectowl));
+
+                }
+
+                return;
+            }
+            let reader = new FileReader();
+            reader.onload = (event) => {
+                const data = event.target.result;  // File content
+                let format;
+                try {
+                    format = detectFormat(data);
+                    //alert(`Format RDF détecté : ${format}`);
+                } catch (error) {
+                    alert(`Erreur de détection du format RDF : ${error.message}`);
+                    return;
+                }
+
+                let defaultBaseIRI = 'http://example.org/ontology#';// Base IRI par défaut
+                let store = $rdf.graph();// Créer un store RDF
+
+                // Parsing RDF
+                $rdf.parse(data, store, defaultBaseIRI, format, (error) => {
+                    if (error) {
+                        alert(`Error when parsing RDF : ${error}`);
+                        return;
+                    }
+                    console.log(`Parsing successful. Number of loaded triples: ${store.statements.length}`);
+
+                    // Step 2: Extract the actual base IRI
+                    const basePredicate = $rdf.namedNode('http://www.w3.org/2000/01/rdf-schema#base');
+                    let actualBaseIRI = store.any(null, basePredicate, null);
+
+                    // Step 3: Normalize URIs if the base differs
+                    if (actualBaseIRI && actualBaseIRI !== defaultBaseIRI) {
+                        store.statements.forEach(statement => {
+                            ['subject', 'predicate', 'object'].forEach(term => {
+                                const value = statement[term].value;
+                                if (value.startsWith(defaultBaseIRI)) {
+                                    statement[term].value = value.replace(defaultBaseIRI, actualBaseIRI);
+                                }
+                            });
+                        });
+                        defaultBaseIRI = actualBaseIRI;
+                    }
+                    console.log('Final RDF Store:', store);
+                    w2confirm(i18next.t(`confirm.rdfinplaceofowl`))
+
+                        .yes(() => {
+                            validateRDF(store);
+                        })
+                        .no(() => {
+                            validateOWL(store);
+                        });
+                });
+            };
+
+            reader.readAsText(file); // Read file as text
+        }
+
+
+        //// Loading files
+        document.getElementById('inputfile').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (!file) {
+                alert("No file selected!");
+                return;
+            }
+            w2confirm(i18next.t(`confirm.replacegraph`))
+                .yes(() => {
+                    cy.$().remove();
+                    loadRDF(file); // Pass file object
+                })
+                .no(() => {
+                    loadRDF(file); // Pass file object
+                });
+        });
+
+        //// Loading inferred files
+        document.getElementById('inputinferred').addEventListener('change', function (event) {
+
+            const file = event.target.files[0];
+            if (!file) {
+                alert("No file selected!");
+                return;
+            }
+            loadRDF(file, true); // Pass file object
+
+        });
+
+        function getMenuItems() {
+            return [
+                {
+                    type: "menu", id: "owl", text: i18next.t("menu.owl"), icon: "fa fa-folder-open",
+                    items: [
+                        { id: "open", text: i18next.t("menu.open") },
+                        { id: "importinferred", text: i18next.t("menu.importinferred") },
+                        { type: 'break' },
+                        { id: "savegraph", text: i18next.t("menu.savegraph") },
+                        { id: "loadgraph", text: i18next.t("menu.loadgraph") },
+                        { type: 'break' },
+                        { id: "exportjson", text: i18next.t("menu.exportjson") }
+                    ]
+                },
+                {
+                    type: "menu", id: "expandCollapse", text: i18next.t("menu.expandCollapse"), icon: "fa fa-object-group",
+                    items: [
+                        {
+                            id: "nodes", text: i18next.t("menu.nodes"),
+                            items: [
+                                { id: "expandAllNodes", text: i18next.t("menu.expandAllNodes") },
+                                { id: "collapseAllNodes", text: i18next.t("menu.collapseAllNodes") },
+                                { id: "expandSelectedNodes", text: i18next.t("menu.expandSelectedNodes") },
+                                { id: "collapseSelectedNodes", text: i18next.t("menu.collapseSelectedNodes") },
+                                { id: "expandSelectedNodesRecursively", text: i18next.t("menu.expandSelectedNodesRecursively") },
+                                { id: "collapseSelectedNodesRecursively", text: i18next.t("menu.collapseSelectedNodesRecursively") },
+                            ]
+                        },
+                        {
+                            id: "edges", text: i18next.t("menu.edges"),
+                            items: [
+                                { id: "expandAllEdges", text: i18next.t("menu.expandAllEdges") },
+                                { id: "collapseAllEdges", text: i18next.t("menu.collapseAllEdges") },
+                                { id: "expandSelectedEdges", text: i18next.t("menu.expandSelectedEdges") },
+                                { id: "collapseSelectedEdges", text: i18next.t("menu.collapseSelectedEdges") },
+                                { id: "collapseEdgesBetweenNodes", text: i18next.t("menu.collapseEdgesBetweenNodes") },
+                                { id: "expandEdgesBetweenNodes", text: i18next.t("menu.expandEdgesBetweenNodes") },
+
+                            ]
+                        }
+                    ]
+                },
+                {
+                    type: 'menu-check', id: 'rendering', text: i18next.t("menu.rendering"), icon: 'fa fa-eye', disabled: false,
+                    items: [
+                        { text: '-- Node' },
+
+                        { id: 'renderingnodeirishortname', text: i18next.t("menu.renderingnodeirishortname"), disabled: true },
+                        { id: 'noderenderinglabel', text: i18next.t("menu.noderenderinglabel"), disabled: true },
+                        { id: 'noderenderingprefix', text: i18next.t("menu.noderenderingprefix"), disabled: true },
+                        { id: 'noderenderingannotation', text: i18next.t("menu.noderenderingannotation"), disabled: true },
+                        { id: 'noderenderingcustom', text: i18next.t("menu.noderenderingcustom"), disabled: true }
+
+                        ,
+                        { text: '-- Edge' },
+
+                        { id: 'edgeirishortName', text: i18next.t("menu.edgeirishortName"), disabled: true },
+                        { id: 'edgerenderingprefixName', text: i18next.t("menu.edgerenderingprefixName"), disabled: true },
+                        { id: 'edgerenderinglabel', text: i18next.t("menu.edgerenderinglabel"), disabled: true },
+                        { id: 'edgerenderingannotationProperty', text: i18next.t("menu.edgerenderingannotationProperty"), disabled: true },
+                        { id: 'edgerenderingcustom', text: i18next.t("menu.edgerenderingcustom"), disabled: true }
+                    ]
+                },
+                {
+                    type: 'menu', id: 'showhidegrabifydelete', text: i18next.t("menu.showhidegrabifydelete"), icon: 'fa fa-eye',
+                    items: [
+                        {
+                            id: 'showhide', text: i18next.t("menu.showhide"),
+                            items: [
+                                { id: 'hideselected', text: i18next.t("menu.hideselected") },
+                                { id: 'hidenonselected', ttext: i18next.t("menu.hidenonselected") },
+                                { id: 'unhideall', text: i18next.t("menu.unhideall") },
+                            ]
+                        },
+                        {
+                            id: 'grabifyungrabify', text: i18next.t("menu.ungrabifyselected"),
+                            items: [
+                                { id: 'ungrabifyselected', text: i18next.t("menu.ungrabifyselected") },
+                                { id: 'ungrabifynonselected', text: i18next.t("menu.ungrabifynonselected") },
+                                { id: 'grabifyselected', text: i18next.t("menu.grabifyselected") },
+                                { id: 'grabifynonselect', text: i18next.t("menu.grabifynonselect") }
+                            ]
+                        },
+                        {
+                            id: 'lockunlock', text: i18next.t("menu.lockunlock"),
+                            items: [
+                                { id: 'lockselected', text: i18next.t("menu.lockselected") },
+                                { id: 'locknonselected', text: i18next.t("menu.locknonselected") },
+                                { id: 'unlockselected', text: i18next.t("menu.unlockselected") },
+                                { id: 'unlocknonselect', text: i18next.t("menu.unlocknonselect") }
+                            ]
+                        },
+                        {
+                            id: 'removerestore', text: i18next.t("menu.removerestore"),
+                            items: [
+                                { id: 'removeselected', text: i18next.t("menu.removeselected") },
+                                { id: 'removeunselected', text: i18next.t("menu.removeunselected") },
+                                { id: 'removeall', text: i18next.t("menu.removeall") },
+                                { id: 'restore', text: i18next.t("menu.restore") },
+
+                            ]
+                        }
+                    ]
+                },
+                {
+                    type: 'menu-check', id: 'display', text: i18next.t('display'), icon: 'fa fa-eye', disabled: false,
+                    items: [
+                        { id: 'showowlconstructs', text: i18next.t('showowlconstructs'), disabled: true },
+                        { id: 'showisa', text: i18next.t('showisa'), disabled: true },
+                        { id: 'showdomainrange', text: i18next.t('showdomainrange'), disabled: true },
+                        { id: 'showlabelasnode', text: i18next.t('showlableasnode'), disabled: true },
+                        { id: 'showlabelasedge', text: i18next.t('showlabelasedge'), disabled: true },
+                        { id: 'showannotationasnode', text: i18next.t('showannotationasnode'), disabled: true },
+                        { id: 'showannotationasedge', text: i18next.t('showannotationasedge'), disabled: true }
+
+                    ],
+                },
+                {
+                    type: 'menu-check', id: 'viewpoint', text: i18next.t('viewpoint'), icon: 'fa fa-eye', disabled: false,
+                    items: [
+                        { id: 'individual', text: i18next.t('individual'), disabled: true },
+                        { id: 'ontology', text: 'ontology', disabled: true },
+                        { id: 'sop', text: 'Subject Object Properties', disabled: true },
+                        { id: 'data', text: 'Data', disabled: true },
+                    ]
+                },
+                {
+                    type: "menu-radio", id: "layout", text: i18next.t("menu.layout"), icon: "fa fa-eye",
+                    selected: "fcose",
+                    items: [
+                        { id: "fcose", text: i18next.t("menu.fcose") },
+                        { id: "grid", text: i18next.t("menu.grid") },
+                        { id: "circle", text: i18next.t("menu.circle") },
+                        { id: "cose", text: i18next.t("menu.cose") },
+                        { id: "breadthfirst", text: i18next.t("menu.breadthfirst") },
+                        { id: "concentric", text: i18next.t("menu.concentric") },
+                        { id: "random", text: i18next.t("menu.random") },
+                        { id: "cola", text: i18next.t("menu.cola") },
+                        { id: "dagre", text: i18next.t("menu.dagre") }
+                    ]
+                },
+                {
+                    type: "menu-radio", id: "language", text: i18next.t("menu.language"), icon: "fa fa-eye",
+                    selected: "fr",
+                    items: [
+                        { id: "fr", text: i18next.t("fr") },
+                        { id: "en", text: i18next.t("en") },
+                    ]
+                }
+            ];
+
+        }
+        function initializeToolbar() {
+            if (w2ui.mainMenu) return; // Prevent multiple initializations
+            mainMenu = new w2toolbar({
+                name: "mainMenu",
+                items: getMenuItems(),
+                onClick: function (event) {
+                    handleMenuAction(event); // Handle menu actions
+                }
+            });
+            updateToolbarTranslations()
+            return mainMenu;
+        }
+
+        function handleTabsAction(event) {
+            var myTabContent = event.target + "Tab"
+            document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
+            document.getElementById(myTabContent).classList.add("active");
+        }
+
+        function handleMenuAction(event) {
+            switch (event.target) {
+                case 'view:nodeRendering':
+                    break;
+                case "view.edgeRendering":
+                    console.log("createEdgeRenderingSubMenu();")
+                    break;
+                case 'owl:open':
+                    const file = document.getElementById('inputfile');
+                    file.value = '';
+                    file.click();
+                    break;
+                case 'owl:importinferred':
+                    const file2 = document.getElementById('inputinferred')
+                    file2.value = '';
+                    file2.click();
+                    break;
+                case 'owl:loadgraph':
+                    const el = document.getElementById('load-from-inp');
+                    el.value = '';
+                    el.click();
+                    break;
+                case 'owl:exportjson':
+                    exportVisibleGraphToFile(cy);
+                    break;
+                case 'owl:savegraph':
+                    if (typeof cy === 'undefined' || !cy) {
+                        console.warn("Cytoscape instance (cy) is not initialized.");
+                        w2alert("Graph non initialisé. Impossible de sauvegarder.");
+                        break;
+                    }
+                    var fileNameToSave = "myGraph.archicg";
+                    w2prompt({
+                        label: 'Enter value',
+                        value: fileNameToSave,
+                        attrs: 'size=6'
+                    })
+                        .change((event) => {
+                            fileNameToSave = event.detail.originalEvent.target.value;
+                        })
+                        .ok(() => {
+                            var visibleElements = cy.elements(':visible'); // Sélectionne uniquement les éléments visibles
+                            api.saveJson(visibleElements, fileNameToSave);
+                        });
+                    break;
+                case 'expandCollapse:expandAllNodes':
+                    api.expandAll()
+                    api.collapseAllEdges(getEdgeOptions())
+                    break;
+                case 'expandCollapse:collapseAllNodes':
+                    api.collapseAll()
+                    api.collapseAllEdges(getEdgeOptions())
+                    break;
+                case 'expandCollapse:expandSelectedNodes':
+                    api.expand(cy.$(":selected"));
+                    api.collapseAllEdges(getEdgeOptions())
+                    break;
+                case 'expandCollapse:collapseSelectedNodes':
+                    api.collapse(cy.$(":selected"));
+                    break;
+                case 'expandCollapse:expandSelectedNodesRecursively':
+                    api.expandRecursively(cy.$(":selected"));
+                    api.collapseAllEdges(getEdgeOptions())
+                    break;
+                case 'expandCollapse:collapseSelectedNodesRecursively':
+                    api.collapseRecursively(cy.$(":selected"));
+                    break;
+                case 'expandCollapse:expandAllEdges':
+                    //  alert("expandAllEdges")
+                    api.expandAllEdges(getEdgeOptions());
+                    break;
+                case 'expandCollapse:collapseAllEdges':
+                    //  alert("collapseAllEdges")
+                    var options = {}
+                    api.collapseAllEdges(getEdgeOptions())
+                    break;
+                case 'expandCollapse:expandSelectedEdges':
+                    api.expandEdges(cy.$("edge:selected"), getEdgeOptions());
+                    break;
+                case 'expandCollapse:collapseSelectedEdges':
+                    api.collapseEdges(cy.$("edge:selected"), getEdgeOptions());
+                    break;
+                case 'expandCollapse:collapseEdgesBetweenNodes':
+                    api.collapseEdgesBetweenNodes(cy.$("node:selected"), getEdgeOptions());
+                    break;
+                case 'expandCollapse:expandEdgesBetweenNodes':
+                    api.expandEdgesBetweenNodes(cy.$("node:selected"), getEdgeOptions());
+                    break;
+                case 'isaEdges':
+                    setTypingDisplay('isaEdges');
+                    break;
+                case 'postfixNotation':
+                    setTypingDisplay('postfixNotation');
+                    break;
+                case 'dataAsNodes':
+                    setDataDisplay('dataAsNodes');
+                    break;
+                case 'dataAsEdges':
+                    setDataDisplay('dataAsEdges');
+                    break;
+                case 'datatypeAsNodes':
+                    setDatatypeDisplay('datatypeAsNodes');
+                    break;
+                case 'datatypeOnEdges':
+                    setDatatypeDisplay('datatypeOnEdges');
+                    break;
+                case 'layout:fcose':
+                    changeLayout('fcose');
+                    break;
+                case 'layout:grid':
+                    changeLayout('grid');
+                    break;
+                case 'layout:circle':
+                    changeLayout('circle');
+                    break;
+                case 'layout:cose':
+                    changeLayout('cose');
+                    break;
+                case 'layout:breadthfirst':
+                    changeLayout('breadthfirst');
+                    break; case 'layout:concentric':
+                    changeLayout('concentric');
+                    break;
+                case 'layout:random':
+                    changeLayout('random');
+                    break;
+                case 'layout:cola':
+                    changeLayout('cola');
+                    break;
+                case 'layout:dagre':
+                    applyDagreLayout('TB');
+                    break;
+                case 'language:fr':
+                    changeLanguage('fr')
+                    break;
+                case 'language:en':
+                    changeLanguage('en')
+                    break;
+
+                case 'showhidegrabifydelete:showhide':
+                    break;
+                case 'showhidegrabifydelete:hideselected':
+                    var eles = cy.$(":selected");
+                    eles = eles.filter(":visible");
+                    eles = eles.union(eles.connectedEdges());
+                    eles.unselect();
+                    console.log(eles)
+                    eles.css('visibility', 'hidden');
+                    eles.css('display', 'none');
+                    break;
+                case 'showhidegrabifydelete:hidenonselected':
+                    var unselected = cy.nodes(":unselected");
+                    var selected = cy.nodes(":selected");
+                    unselected.forEach(function (node) {
+                        if (node.descendants(node.id()).intersection(selected).length == 0) {
+                            node.css('visibility', 'hidden');
+                            node.css('display', 'none');
+                        }
+                    })
+                    break;
+                case 'showhidegrabifydelete:unhideall':
+                    var eles = cy.filter(":hidden");
+                    var connectedEdges = eles.connectedEdges(function (edge) {
+                        if ((edge.source().visible() || eles.contains(edge.source())) && (edge.target().visible() || eles.contains(edge.target()))) {
+                            return true;
+                        }
+                        return false;
+                    });
+                    eles = eles.union(connectedEdges);
+                    eles.unselect();
+                    eles.style('visibility', 'visible');
+                    eles.style('display', 'element');
+                    break;
+                case 'showhidegrabifydelete:grabifyungrabify':
+                    break;
+                case 'showhidegrabifydelete:ungrabifyselected':
+                    var nodes = cy.nodes(":selected").ungrabify();
+                    ungrabifiedNodes = ungrabifiedNodes.concat(nodes);
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:ungrabifynonselected':
+                    var nodes = cy.nodes(":unselected").ungrabify();
+                    ungrabifiedNodes = ungrabifiedNodes.concat(nodes);
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:grabifyselected':
+                    var nodes = cy.nodes(":selected").grabify();
+                    ungrabifiedNodes = ungrabifiedNodes.filter(function (el) {
+                        return !nodes.includes(el);
+                    });
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:grabifynonselect':
+                    var nodes = cy.nodes(":unselected").grabify();
+                    ungrabifiedNodes = ungrabifiedNodes.filter(function (el) {
+                        return !nodes.includes(el);
+                    });
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:lockunlock':
+                    break;
+                case 'showhidegrabifydelete:lockselected':
+                    var nodes = cy.nodes(":selected").lock();
+                    lockedNodes = lockedNodes.concat(nodes);
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:locknonselected':
+                    var nodes = cy.nodes(":unselected").lock();
+                    lockedNodes = lockedNodes.concat(nodes);
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:unlockselected':
+                    var nodes = cy.nodes(":selected").unlock();
+                    lockedNodes = lockedNodes.filter(function (el) {
+                        return !nodes.includes(el);
+                    });
+                    nodes.unselect();
+                    break;
+                case 'showhidegrabifydelete:unlocknonselect':
+                    var nodes = cy.nodes(":unselected").unlock();
+                    lockedNodes = lockedNodes.filter(function (el) {
+                        return !nodes.includes(el);
+                    });
+                    nodes.unselect();
+                    break;
+
+                case 'showhidegrabifydelete:removeselected':
+                    //   if (undoRedo) { ur.do("remove", elements) } else { removed = removed.union(cy.remove(elements)); }
+
+                    removed = cy.remove(cy.$(":selected"));
+
+                    break;
+                case 'showhidegrabifydelete:removeunselected':
+                    //  if (undoRedo) { ur.do("remove", elements) } else { removed = removed.union(cy.remove(elements)); }
+                    removed = cy.remove(cy.$(":unselected"));
+
+                    break;
+                case 'showhidegrabifydelete:removeall':
+                    //    if (undoRedo) { ur.do("remove", elements) } else { removed = removed.union(cy.remove(elements)); }
+                    removed = cy.remove(cy.$());
+                    break;
+                case 'showhidegrabifydelete:restore':
+                    removed.restore();
+                    break;
+            }
+        }
+        
+        
+        // Define the layout first
+        let layout = new w2layout({
+            //box: '#layout',
+            name: 'mainLayout',
+            panels: [
+                { type: 'top', size: 50, style: 'border-bottom: 1px solid #ccc;' },
+                { type: 'left', size: 200, style: 'border-right: 1px solid #ccc;' },
+                { type: 'main', style: 'background: #f8f9fa;', html: '<div id="cy"></div> ' },
+                {
+                    type: 'right', size: 250, style: 'border-left: 1px solid #ccc;', html: `
+                            <div id="infoPanel">        
+                <h3>Informations</h3>
+                <p><strong>ID:</strong> <span id="Id">N/A</span><br />
+                    <strong>Label:</strong> <span id="Label">N/A</span>
+                </p>
+                <p><strong>IRI:</strong> <span id="IRI">N/A</span><br />
+                    <strong>Statement:</strong> <span id="Statement">N/A</span><br />
+                    <strong>Type:</strong> <span id="Type">N/A</span><br>
+            </div>` },
+                {
+                    type: 'bottom', size: 50, style: 'border-top: 1px solid #ccc;', html: ``
+                }
+            ]
+        })
+        layout.render('#mainLayout'); // Render the layout in the container      
+        w2ui.mainLayout.html('top', initializeToolbar());
+        w2ui.mainLayout.html('bottom', initializeTripleTabs());
+
+        // --- Placeholder Functions ---
+        function Open() {
+            console.log("Open...");
+            // TODO: Implement file input and OWL parsing
+        }
+
+        function importInferred() {
+            console.log("Import OWL file with inference...");
+            // TODO: Implement inference-based OWL loading
+        }
+
+        function expandAllNodes() {
+            console.log("Expanding all nodes...");
+            // TODO: Call Cytoscape.js expand function
+        }
+
+        function collapseAllNodes() {
+            console.log("Collapsing all nodes...");
+            // TODO: Call Cytoscape.js collapse function
+        }
+
+        function expandSelectedNodes() {
+            console.log("Expanding selected nodes...");
+            // TODO: Expand only selected nodes in Cytoscape.js
+        }
+
+        function collapseSelectedNodes() {
+            console.log("Collapsing selected nodes...");
+            // TODO: Collapse only selected nodes in Cytoscape.js
+        }
+
+        function setTypingDisplay(mode) {
+            console.log("Setting typing display mode:", mode);
+            // TODO: Change the display style for types
+        }
+
+        function setDataDisplay(mode) {
+            console.log("Setting data display mode:", mode);
+            // TODO: Adjust visualization for annotations and data
+        }
+
+        function setDatatypeDisplay(mode) {
+            console.log("Setting datatype display mode:", mode);
+            // TODO: Adjust how datatypes are displayed (nodes or edges)
+        }
+
+        let store; // Déclare le store comme variable globale
+        // Stocke les groupes d'équivalence avec leurs UUID
+        var nodes = [];
+        var edges = [];
+        var equivalenceGroups = new Map();
+        var actualBaseIRI;
+        var defaultBaseIRI
+        var annotationProperties = new Set([
+            "http://www.w3.org/2000/01/rdf-schema#label",
+            "http://www.w3.org/2000/01/rdf-schema#comment",
+            "http://purl.org/dc/elements/1.1/creator",
+            "http://purl.org/dc/elements/1.1/date",
+            "http://www.w3.org/2002/07/owl#deprecated",
+            "http://www.w3.org/2002/07/owl#versionInfo"
+        ]);
+
+        function makePopper(ele) {
+            // console.log("makePopper")
+            let ref = ele.popperRef();
+            ele.tippy = tippy(document.createElement('div'), {
+                // popperInstance will be available onCreate
+                lazy: false,
+                followCursor: 'true',
+                hideOnClick: false,
+                flipOnUpdate: true,
+                onShow(instance) {
+                    instance.popperInstance.reference = ref
+                },
+            });
+            ele.tippy.setContent(ele.id());
+        }
+
+
+        // Create Node Function
+        function createNode(id, label, type, IRI, parent = null) {
+            // Prepare the node data
+            const nodeData = {
+                id,
+                label,
+                type,
+                IRI
+            };
+            // Add the parent only if it is defined
+            if (parent) {
+                nodeData.parent = parent;
+            }
+            // Push the node data to the array
+            nodes.push({
+                group: 'nodes',
+                data: nodeData,
+                classes: type
+            });
+            //   console.log(`I'm creating a node with id=${nodeData.id}`)
+        }
+
+        function updateNode(id, characteristics = {}) {
+            // Find the node by id
+            //alert ("updateNode:(" +id+")")
+            const node = nodes.find(n => n.data.id === id);
+
+            // If the node exists, update its characteristics
+            if (node) {
+                // Check if the object contains specific characteristics and update accordingly
+                if (characteristics.functional) {
+                    node.data.functional = true;
+                    node.data.label = '→' + node.data.label;
+                }
+                if (characteristics.transitive) {
+                    node.data.transitive = true;
+                    node.data.label = '△' + node.data.label;
+                }
+                if (characteristics.inverseFunctional) {
+                    node.data.inverseFunctional = true;
+                    node.data.label = '←' + node.data.label;
+                }
+                if (characteristics.irreflexive) {
+                    node.data.irreflexive = true;
+                    node.data.label = '𐌗◯' + node.data.label;
+                }
+                if (characteristics.reflexive) {
+                    node.data.reflexive = true;
+                    node.data.label = '◯' + node.data.label;
+                }
+                if (characteristics.namedNodemetric) {
+                    node.data.namedNodemetric = true;
+                    node.data.label = '↔' + node.data.label;
+                }
+                if (characteristics.asymmetric) {
+                    node.data.asymmetric = true;
+                    node.data.label = '𐌗↔' + node.data.label;
+                }
+                //alert (JSON.stringify(node))
+            }
+        }
+
+        function createEdge(id, label, source, target, type) {
+            // Retrieve the style for the given type
+
+            // Prepare the edge data
+            const edgeData = {
+                id,
+                label,
+                source,
+                target,
+                type,
+                edgeType: type
+            };
+
+            // Push the edge data to the edges array
+            edges.push({
+                group: 'edges',
+                data: edgeData,
+                classes: type // Optional: Keep the class for additional styling
+            });
+        }
+
+        /**
+          * Met à jour ou crée un nœud avec l'attribut 'parent'.
+          *
+          * @param {string} iri - Identifiant unique de l'IRI.
+          * @param {string} groupID - Identifiant du groupe d'équivalence.
+          */
+        function updateOrCreateNode(iri, groupID, type) {
+            // Recherche un nœud existant avec cet IRI
+            const existingNode = nodes.find(node => node.data.id === iri);
+            const existingGroupIDNode = nodes.find(node => node.data.id === groupID);
+            //   alert(JSON.stringify(existingNode))
+
+            if (existingNode) {
+                // Met à jour l'attribut 'parent' du nœud existant
+                existingNode.data.parent = groupID;
+            } else {
+                // Crée un nouveau nœud si aucun nœud existant n'est trouvé
+                if (type === "OWLProperty") {
+                    createNode(iri, node.data.label, 'property', iri, groupID);
+                }
+                else { createNode(iri, node.data.label, 'class', iri, groupID); }
+            }
+            if (!existingGroupIDNode) {
+                // Crée un nouveau nœud si aucun nœud existant n'est trouvé
+                if (type === "OWLProperty") {
+                    createNode(groupID, "≡", 'equivalence', "", type);
+                } else {
+                    createNode(groupID, "≡", 'equivalence', "", type);
+                }
+            }
+        }
+
+        // Fonction pour traiter une équivalence de propriété
+        function processEquivalence(iriA, iriB, type) {
+            //   console.log(iriA + " equivalent to" + iriB)
+            let groupID;
+            // Vérifie si un groupe d'équivalence existe déjà pour l'un des IRI
+            for (let [id, set] of equivalenceGroups) {
+                if (set.has(iriA) || set.has(iriB)) {
+                    groupID = id;
+                    set.add(iriA);
+                    set.add(iriB);
+                    break;
+                }
+            }
+            // Si aucune correspondance n'a été trouvée, crée un nouveau groupe d'équivalence
+            if (!groupID) {
+                groupID = ULID.ulid();
+                equivalenceGroups.set(groupID, new Set([iriA, iriB]));
+            }
+            // Mise à jour ou création des nœuds
+            updateOrCreateNode(iriA, groupID, type);
+            updateOrCreateNode(iriB, groupID, type);
+
+            return groupID;
+        }
+
+        // Fonction pour détecter le format du fichier RDF
+        function detectFormat(data) {
+            if (data.trim().startsWith('<?xml')) {
+                return 'application/rdf+xml'; // RDF/XML
+            } else if (data.trim().startsWith('{') || data.trim().startsWith('[')) {
+                return 'application/ld+json'; // JSON-LD
+            } else if (data.includes('@prefix') || data.includes('@base')) {
+                return 'text/turtle'; // Turtle
+            } else {
+                throw new Error("Format RDF non détecté ou non supporté.");
+            }
+        }
+
+        function generateNodeId(iri) {
+            return iri.replace(/[^a-zA-Z0-9]/g, '_');
+        }
+
+        function getPathFromIRI(iri) {
+            try {
+                var path = iri;
+                var LogMessage = "no # or /";
+
+                console.log(`iri: ${iri}`);
+
+                // Find the position of # and / (if they exist)
+                const hashIndex = iri.lastIndexOf('#');
+                const slashIndex = iri.lastIndexOf('/');
+
+                // If # exists, we take the substring before the #
+                if (hashIndex !== -1) {
+                    path = iri.substring(0, hashIndex);
+                    LogMessage = "#";
+                }
+                // If only / exists and no #, we take the substring before the last /
+                else if (slashIndex !== -1) {
+                    path = iri.substring(0, slashIndex);
+                    LogMessage = "/";
+                }
+
+                console.log(LogMessage);
+                return path;
+            } catch (error) {
+                console.error("Error in getPathFromIRI:", error);
+                return null;
+            }
+        }
+
+
+        function removeTrailingSeparator(iri) {
+            console.log(iri)
+            if (iri.endsWith('/') || iri.endsWith('#')) {
+                return iri.slice(0, -1); // Remove the last character
+            }
+            return iri;
+        }
+
+        function getOWLTypeFromPredicate(predicate, end) {
+            var typeMapping = {
+                // Classes and subclasses
+                "subClass": { subjectType: "class", objectType: "class" },
+                "isa": { subjectType: "individual", objectType: "class" },
+                // Properties (Object, Datatype, and Annotation)
+                "subProperty": { subjectType: "property", objectType: "property" },
+            };
+
+            console.log(`predicate:${predicate}`);
+            console.log(`end:${end}`);
+
+            if (typeMapping[predicate]) {  // Ensure predicate exists in mapping
+                if (end === "object") {
+                    console.log(typeMapping[predicate]);
+                    console.log(typeMapping[predicate]["objectType"])
+                    return typeMapping[predicate]["objectType"];
+                }
+                if (end === "subject") {
+                    console.log(typeMapping[predicate]);
+                    console.log(typeMapping[predicate]["subjectType"])
+                    return typeMapping[predicate]["subjectType"];
+                }
+            } else {
+                console.warn(`Warning: Predicate "${predicate}" not found in type mapping.`);
+            }
+
+            return null; // Return null if predicate is not found
+        }
+
+
+
+
+        function displayLabelsOnDoubleClick(resource, store, containerId) {
+            // Add event listener for double click
+            document.getElementById(containerId).addEventListener('dblclick', function () {
+                // Get all possible label types (rdfs:label, skos:prefLabel, etc.)
+                const labelPredicates = [
+                    'http://www.w3.org/2000/01/rdf-schema#label',
+                    'http://www.w3.org/2004/02/skos/core#prefLabel',
+                    'http://www.w3.org/2004/02/skos/core#altLabel',
+                ];
+
+                const labels = [];
+
+                // Iterate over predicates to fetch all labels
+                labelPredicates.forEach(predicate => {
+                    const foundLabels = store.each(resource, $rdf.namedNode(predicate), null);
+                    foundLabels.forEach(label => {
+                        labels.push({
+                            type: predicate.split('#')[1], // Extract 'label', 'prefLabel', etc.
+                            lang: label.lang || 'none',   // Language of the label
+                            text: label.value             // Text of the label
+                        });
+                    });
+                });
+
+                // Check if labels are found
+                if (labels.length === 0) {
+                    alert('No labels found for this resource.');
+                    return;
+                }
+
+                // Generate HTML list of labels
+                let html = '<ul>';
+                labels.forEach(label => {
+                    html += `
+                <li>
+                    <strong>Type:</strong> ${label.type}<br>
+                    <strong>Language:</strong> ${label.lang}<br>
+                    <strong>Text:</strong> ${label.text}
+                </li>
+            `;
+                });
+                html += '</ul>';
+
+                // Display the HTML in a container
+                const container = document.getElementById(containerId);
+                container.innerHTML = html;
+            });
+        }
+
+        const rdfType = $rdf.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type');
+        const namedIndividual = $rdf.namedNode('http://www.w3.org/2002/07/owl#NamedIndividual');
+        const objectProperty = $rdf.namedNode('http://www.w3.org/2002/07/owl#ObjectProperty');
+        const owlDatatypeProperty = $rdf.namedNode('http://www.w3.org/2002/07/owl#DatatypeProperty');
+        const rdfsSubClassOf = $rdf.namedNode('http://www.w3.org/2000/01/rdf-schema#subClassOf');
+        const rdfsSubPropertyOf = $rdf.namedNode('http://www.w3.org/2000/01/rdf-schema#subPropertyOf');
+        const owlEquivalentProperty = $rdf.namedNode('http://www.w3.org/2002/07/owl#equivalentProperty');
+        const owlEquivalentClass = $rdf.namedNode('http://www.w3.org/2002/07/owl#equivalentClass');
+        const owlInverseProperty = $rdf.namedNode('http://www.w3.org/2002/07/owl#inverseOf');
+        const rdfsDomain = $rdf.namedNode("http://www.w3.org/2000/01/rdf-schema#domain");
+        const rdfsRange = $rdf.namedNode("http://www.w3.org/2000/01/rdf-schema#range");
+        const owlClass = $rdf.namedNode('http://www.w3.org/2002/07/owl#Class');
+        const label = $rdf.namedNode('http://www.w3.org/2000/01/rdf-schema#label')
+        const propertyChainAxiom = $rdf.namedNode("http://www.w3.org/2002/07/owl#propertyChainAxiom")
+        const owlOntology = $rdf.namedNode('http://www.w3.org/2002/07/owl#Ontology');
+        const owlImports = $rdf.namedNode('http://www.w3.org/2002/07/owl#imports');
+        const owlFunctional = $rdf.namedNode('http://www.w3.org/2002/07/owl#FunctionalProperty');
+        const owlInverseFunctional = $rdf.namedNode('http://www.w3.org/2002/07/owl#InverseFunctionalProperty');
+        const owlTransitive = $rdf.namedNode('http://www.w3.org/2002/07/owl#TransitiveProperty');
+        const owlSymmetric = $rdf.namedNode('http://www.w3.org/2002/07/owl#SymmetricProperty');
+        const owlAsymmetric = $rdf.namedNode('http://www.w3.org/2002/07/owl#AsymmetricProperty');
+        const owlReflexive = $rdf.namedNode('http://www.w3.org/2002/07/owl#ReflexiveProperty');
+        const owlIrreflexive = $rdf.namedNode('http://www.w3.org/2002/07/owl#IrreflexiveProperty');
+        const annotationProperty = $rdf.namedNode('http://www.w3.org/2002/07/owl#AnnotationProperty');
+
+        function getCharacteristicsFromOPNoceId(nodeId) {
+            try {
+                // Get the node using Cytoscape
+                const node = cy.nodes().filter(node => node.data('id') === nodeId)[0];
+
+                //cy.getElementById(nodeId);
+                //   console.log(nodeId)
+
+
+                // Define the list of attributes you're interested in
+                const attributes = ['functional', 'reflexive', 'transitive', 'symmetric', 'inversefunctional', 'asymmetric', 'irreflexive'];
+
+                // Create an object to store which attributes are true
+                let trueAttributes = [];
+
+                // Iterate over each attribute and check if it exists
+                attributes.forEach(attribute => {
+
+                    // Check if the attribute exists and is true, then set it to true
+
+                    if (node.data(attribute) === true) {
+                        trueAttributes.push(attribute);
+                    }
+
+                });
+
+                // If any attributes were found, display them in an alert
+                if (trueAttributes.length > 0) {
+                    alert('Characteristics set to true: ' + trueAttributes.join(', '));
+                } else {
+                    alert('No Characteristics found');
+                }
+            } catch (error) { console.log("getcharacterics error:" + error) }
+
+        }
+
+        // Function to extract any label from a resource (no language filter)
+        function getLabelFromResource(resourceURI, store) {
+            // alert(`getLabelFromRessource(${resourceURI}`);
+            try {
+                const absoluteIRI = /^(https?|file):\/\//.test(resourceURI)
+                    ? resourceURI
+                    : defaultBaseIRI + resourceURI;
+
+                // Create a RDF resource symbol
+                const resource = $rdf.namedNode(absoluteIRI);
+                // Get all possible label types (rdfs:label, skos:prefLabel, etc.)
+                const labelPredicates = [
+                    'http://www.w3.org/2000/01/rdf-schema#label',
+                    'http://www.w3.org/2004/02/skos/core#prefLabel',
+                    'http://www.w3.org/2004/02/skos/core#altLabel',
+                ];
+
+                var labels = [];
+                // Iterate over predicates to fetch all labels
+                labelPredicates.forEach(predicate => {
+                    const foundLabels = store.each(resource, $rdf.namedNode(predicate), null);
+                    foundLabels.forEach(label => {
+                        labels.push({
+                            type: predicate.split('#')[1], // Extract 'label', 'prefLabel', etc.
+                            lang: label.lang || 'none',   // Language of the label
+                            text: label.value             // Text of the label
+                        });
+                    });
+                });
+                // Check if labels are found
+                if (labels.length === 0) {
+                    alert('No labels found for this resource.');
+                    return;
+                }
+
+                // Generate HTML list of labels
+                let html = '';
+                labels.forEach(label => {
+                    html += `
+Type: ${label.type}
+Language: ${label.lang}
+Text:${label.text}
+                `;
+                });
+                html += '';
+
+                // Display the HTML in a container
+                alert(html)
+
+                // Extract and return labels as a string
+                const allLabels = labels.map(label => label.value).join(', ');
+                //  console.log(`Labels found: ${allLabels}`);
+                return allLabels;
+            } catch (error) {
+                console.error(`Error retrieving label for resource ${resourceURI}:`, error);
+                return 'Error'; // Return a default error label
+            }
+        }
+
+        // Function to generate a graph with Cytoscape.js from annotation
+        function generateGraphFromAnnotations(annotations) {
+            annotations.forEach((annotation, annotationIndex) => {
+                console.log(annotation.object)
+                createEdge(ULID.ulid(), annotation.object, annotation.subject, annotation.predicate, "annotation")
+            });
+
+        }
+
+        // Function to generate a graph with Cytoscape.js from the property chains
+        function generateGraphFromPropertyChains(chains) {
+            const elements = [];
+            const propertyMap = new Map();
+            chains.forEach((chain, chainIndex) => {
+                // Add a node for the property chain itself
+
+                const chainNodeId = ULID.ulid();
+                var propertyChainDerivedProperty = chains.property
+                createNode(chainNodeId, `PropertyChain ${chainIndex + 1}`, "propertychain", "", chain.property);
+
+                let previousNodeId = null;
+
+
+                // Add nodes for each property in the chain and its elements
+                chain.chain.forEach((property, propertyIndex) => {
+                    const propertyNodeId = `property-${propertyIndex}-${chainIndex}`;
+
+                    const blankNodeId = `blank-${propertyIndex}-${chainIndex}`;
+                    //    console.log(`Property value:${property}`)
+
+                    //createNode(id, label, type, IRI, parent = null)
+                    createNode(blankNodeId, `${propertyIndex + 1}`, "chainmember", "", chainNodeId);
+
+
+                    // If it's not the first element, create an edge between the previous and the next
+                    if (previousNodeId) {
+                        //    function createEdge(id, label, source, target, type)
+                        createEdge(ULID.ulid(), '', previousNodeId, blankNodeId, 'nextchainmember')
+                    }
+
+                    // Create an edge between the "Blank" node and the property node                   
+                    //  createEdge(ULID.ulid(), `${propertyIndex + 1}`, blankNodeId,property, 'nextchaintype')
+                    createEdge(ULID.ulid(), `${propertyIndex + 1}`, chainNodeId, property, 'nextchaintype')
+
+
+                    // Update previousNodeId
+                    previousNodeId = blankNodeId;
+                });
+
+                // Create an edge between the chain node and the first property in the chain
+                //createEdge(ULID.ulid(), 'Starts', chainNodeId, `property-0-${chainIndex}`, 'nextchainmember')
+
+            });
+        }
+
+        // Function to extract property chains from the store
+        function extractPropertyChains(store) {
+            const propertyChains = [];
+            // Find all owl:propertyChainAxiom axioms
+            store.statementsMatching(undefined, $rdf.namedNode("http://www.w3.org/2002/07/owl#propertyChainAxiom")).forEach(statement => {
+                // If the statement contains a propertyChainAxiom
+                if (statement.object && statement.object.elements && Array.isArray(statement.object.elements)) {
+                    // Extract the elements of the property chain
+                    const chain = statement.object.elements.map(el => el.value);
+                    propertyChains.push({
+                        chain: chain,
+                        property: statement.subject.value // Property associated with the chain
+                    });
+                }
+            });
+
+            return propertyChains;
+        }
+
+        function extractAnnotations(store, annotationProperties) {
+            let annotations = [];
+            annotationProperties.forEach(annotationProp => {
+                store.match(undefined, $rdf.namedNode(annotationProp), undefined).forEach(triple => {
+                    //  console.log("extractedAnnotation with object: "+triple.object.value + ",predicate: "+ triple.predicate.value + " and subject: "+ triple.subject.value)
+                    annotations.push({
+                        subject: triple.subject.value,
+                        predicate: triple.predicate.value,
+                        object: triple.object.value
+                    });
+                });
+            });
+
+            return annotations;
+        }
+
+        // Fonction de validation RDF for s o p triples visualisation
+        function validateRDF(store) {
+            const triplesSelect = document.getElementById('triplesSelect');
+            document.getElementById('triplesSelect').innerHTML = '';
+
+            let nodeSet = new Set(); // To track added node IDs
+            store.statements.forEach(({ subject, predicate, object }) => {
+                const option = document.createElement('option');
+                option.textContent = subject + " " + predicate + " " + object;
+                triplesSelect.appendChild(option);
+                // Process subject node
+                const subjectLabel = subject.termType === "NamedNode" ? getLabelFromIRI(subject.value) : subject.value;
+                const subjectClass = subject.termType === "NamedNode" ? "irinode" : "literalnode";
+
+                if (!nodeSet.has(subject.value)) {
+                    nodeSet.add(subject.value);
+                    createNode(subject.value, subjectLabel, subjectClass, subjectLabel);
+                }
+
+                // Process object node
+                const objectLabel = object.termType === "NamedNode" ? getShortName(object.value) : object.value;
+
+                const objectClass = object.termType === "NamedNode" ? "irinode" : "literalnode";
+
+                if (!nodeSet.has(object.value)) {
+                    nodeSet.add(object.value);
+                    createNode(object.value, objectLabel, objectClass, objectLabel);
+                }
+
+                // Add edge
+                createEdge(ULID.ulid(), getShortName(predicate.value), subject.value, object.value, "predicate");
+            });
+
+
+            //initialisation du graphe
+            cy.elements().remove();
+            cy.add(nodes);
+            updatePropertyNodesWithExistingDomainsAndRangesInGraph(cy, domainHash, rangeHash)
+
+
+            edges.forEach(edge => {
+                try {
+                    // Add the edge directly using its existing data
+                    cy.add({
+                        group: 'edges',
+                        data: edge.data,
+                        classes: edge.classes
+                    });
+                } catch (error) {
+                    console.warn(`Error adding edge ${edge.data.id}: ${error.message}`);
+
+                    // Check and create missing source node
+                    alert("blank source: " + edge.data.source)
+                    if (cy.getElementById(edge.data.source).length === 0) {
+                        cy.add({
+                            group: 'nodes',
+                            data: { id: edge.data.source },
+                            classes: 'blank-node'
+                        });
+                        console.log(`Created blank node: ${edge.data.source}`);
+                    }
+                    console.log("blank target: " + edge.data.source)
+                    // Check and create missing target node
+                    if (cy.getElementById(edge.data.target).length === 0) {
+                        cy.add({
+                            group: 'nodes',
+                            data: { id: edge.data.target },
+                            classes: 'blank-node'
+                        });
+                        console.log(`Created blank node: ${edge.data.target}`);
+                    }
+
+                    // Retry adding the edge now that nodes exist
+                    try {
+                        cy.add({
+                            group: 'edges',
+                            data: edge.data,
+                            classes: edge.classes
+                        });
+                    } catch (retryError) {
+                        console.error(`Failed again to add edge ${edge.data.id}:`, retryError);
+                    }
+
+                }
+            });
+
+            //   api = cy.expandCollapse('get');
+
+            // run ?
+            console.log("Ontology successfully imported into Cytoscape!");
+
+            // Déplier tout au chargement
+            api.expandAll();
+            api.collapseAllEdges(getEdgeOptions())
+        }
+
+        // Fonction de validation OWL
+        function validateOWL(store) {
+
+            const uniqueNodeIds = new Set();
+
+            // Query for the ontology IRI searching for the firt occurence of owlOntoloyg with store.any
+            const ontologyIRI = store.any(undefined, rdfType, owlOntology);
+            // Log the extracted ontology IRI
+            createNode(ontologyIRI.value, getLabelFromIRI(ontologyIRI.value), "ontology", ontologyIRI.value, "");
+
+            // Imports          
+            const imports = store.each(ontologyIRI, owlImports);
+            if (imports.length > 0) {
+                imports.forEach((importedOntology) => {
+                    //   console.log(`Imported Ontology: ${importedOntology.value}`);
+                    createNode(removeTrailingSeparator(importedOntology.value), removeTrailingSeparator(importedOntology.value), "ontology", importedOntology.value, "");
+                    createEdge(ULID.ulid(), "import", removeTrailingSeparator(ontologyIRI.value), removeTrailingSeparator(importedOntology.value), "import")
+                });
+            } else {
+                //   console.log('No imports found');
+            }
+
+            // Define an exhaustive list of common RDF, XSD, and OWL datatypes
+            const datatypeIRIs = [
+                // XSD Datatypes
+                'http://www.w3.org/2001/XMLSchema#string',
+                'http://www.w3.org/2001/XMLSchema#boolean',
+                'http://www.w3.org/2001/XMLSchema#decimal',
+                'http://www.w3.org/2001/XMLSchema#integer',
+                'http://www.w3.org/2001/XMLSchema#int',
+                'http://www.w3.org/2001/XMLSchema#long',
+                'http://www.w3.org/2001/XMLSchema#short',
+                'http://www.w3.org/2001/XMLSchema#byte',
+                'http://www.w3.org/2001/XMLSchema#nonPositiveInteger',
+                'http://www.w3.org/2001/XMLSchema#nonNegativeInteger',
+                'http://www.w3.org/2001/XMLSchema#positiveInteger',
+                'http://www.w3.org/2001/XMLSchema#unsignedLong',
+                'http://www.w3.org/2001/XMLSchema#unsignedInt',
+                'http://www.w3.org/2001/XMLSchema#unsignedShort',
+                'http://www.w3.org/2001/XMLSchema#unsignedByte',
+                'http://www.w3.org/2001/XMLSchema#float',
+                'http://www.w3.org/2001/XMLSchema#double',
+                'http://www.w3.org/2001/XMLSchema#dateTime',
+                'http://www.w3.org/2001/XMLSchema#date',
+                'http://www.w3.org/2001/XMLSchema#time',
+                'http://www.w3.org/2001/XMLSchema#duration',
+                'http://www.w3.org/2001/XMLSchema#QName',
+                'http://www.w3.org/2001/XMLSchema#anyURI',
+                'http://www.w3.org/2001/XMLSchema#base64Binary',
+                'http://www.w3.org/2001/XMLSchema#hexBinary',
+                'http://www.w3.org/2001/XMLSchema#normalizedString',
+                'http://www.w3.org/2001/XMLSchema#token',
+                'http://www.w3.org/2001/XMLSchema#language',
+                'http://www.w3.org/2001/XMLSchema#NMTOKEN',
+                'http://www.w3.org/2001/XMLSchema#ID',
+                'http://www.w3.org/2001/XMLSchema#IDREF',
+                'http://www.w3.org/2001/XMLSchema#ENTITY',
+                'http://www.w3.org/2001/XMLSchema#anySimpleType',
+
+                // RDF Datatypes
+                'http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral',
+                'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString',
+
+                // OWL Datatypes (subset of XSD types)
+                'http://www.w3.org/2002/07/owl#rational',
+                'http://www.w3.org/2002/07/owl#real'
+            ];
+
+            const classes = store.each(null, rdfType, owlClass);
+            // function createNode(id, label, type, IRI, parent = null) {
+            createNode("OWLClass", "OWLClasses", "class", owlClass.value, ontologyIRI.value);
+            createNode("OWLAnnotationProperty", "OWLAnnotationProperties", "annotationproperty", "", ontologyIRI.value);
+            createNode("defaultOWLAnnotationProperty", "defaultOWLAnnotationProperties", "annotationproperty", "");
+            createNode("Datatype", "DataTypes", "datatype", "");
+            createNode("http://www.w3.org/2001/XMLSchema", "XMLS", "datatype", "http://www.w3.org/2001/XMLSchema", "Datatype");
+            createNode("http://www.w3.org/1999/02/22-rdf-syntax-ns", "RDFS", "datatype", "http://www.w3.org/2001/XMLSchema", "Datatype");
+            createNode("http://www.w3.org/2002/07/owl", "OWL", "datatype", "http://www.w3.org/2001/XMLSchema", "Datatype");
+            createNode("OWLProperty", "OWLProperties", "property", objectProperty.value, ontologyIRI.value);
+            createNode("OWLIndividual", "OWLIndividuals", "individual", namedIndividual.value, ontologyIRI.value);
+            createNode("OWLDatatypeProperty", "OWLDatatypeProperty", "datatypeproperty", owlDatatypeProperty.value, ontologyIRI.value);
+
+            // createNode("http://www.w3.org/2002/07/owl#topObjectProperty", "topObjectProperty", "property", objectProperty.value, "OWLProperty");
+
+            const allProperties = store.statementsMatching(null, null, null); // Toutes les relations de triplets
+
+            // Clear previous content in dropdowns
+            document.getElementById('classesSelect').innerHTML = '';
+            document.getElementById('objectPropertiesSelect').innerHTML = '';
+            document.getElementById('namedIndividualsSelect').innerHTML = '';
+            document.getElementById('dataPropertiesSelect').innerHTML = '';
+            document.getElementById('isaRelationsSelect').innerHTML = '';
+            document.getElementById('classSubsumptionSelect').innerHTML = '';
+            document.getElementById('propertySubsumptionSelect').innerHTML = '';
+            document.getElementById('propertyEquivalenceSelect').innerHTML = '';
+            document.getElementById('classEquivalenceSelect').innerHTML = '';
+            document.getElementById('individualRelationsSelect').innerHTML = '';
+            document.getElementById('domainsSelect').innerHTML = '';
+            document.getElementById('rangesSelect').innerHTML = '';
+
+            // Classes OWL
+            const classesSelect = document.getElementById('classesSelect');
+            // Vérifier qu'au moins une classe OWL est définie            
+            if (classes.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucune classe OWL trouvée !";
+                classesSelect.appendChild(option);
+            } else {
+                classes.forEach(cls => {
+                    const option = document.createElement('option');
+                    option.textContent = cls.value;
+                    classesSelect.appendChild(option);
+
+                    const label = getLabelFromIRI(cls.value);
+                    const nodeId = cls.value;
+                    uniqueNodeIds.add(nodeId);
+                    createNode(nodeId, label, 'class', cls.value, 'OWLClass');
+
+                });
+            }
+
+            // ObjectProperties OWL
+            const objectProperties = store.each(null, rdfType, objectProperty);
+            const objectPropertiesSelect = document.getElementById('objectPropertiesSelect');
+            // Vérifier qu'au moins une propriété objet (ObjectProperty) est définie
+            if (objectProperties.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucune propriété objet OWL trouvée !";
+                objectPropertiesSelect.appendChild(option);
+            } else {
+                objectProperties.forEach(prop => {
+                    const option = document.createElement('option');
+                    option.textContent = prop.value;
+                    objectPropertiesSelect.appendChild(option);
+
+                    const propertyIRI = prop.value;
+                    const label = getLabelFromIRI(propertyIRI);
+                    const propertyId = propertyIRI;
+
+                    uniqueNodeIds.add(propertyId);
+                    createNode(propertyId, label, 'property', prop.value, 'OWLProperty');
+                    //   createNode(propertyId + "_domain", 'domain', 'oprd', prop.value, propertyId);
+                    //   createNode(propertyId + "_range", 'range', 'oprd', prop.value, propertyId);
+                    //   createEdge(propertyId + '_toRange', "", propertyId, propertyId + "_range", "range");
+                    //   createEdge(propertyId + '_toDomain', "", propertyId, propertyId + "_domain", "domain");
+
+                    // Check if the property is functional
+
+                    const functionalProperty = store.each(prop, rdfType, owlFunctional);
+                    if (functionalProperty.length > 0) {
+                        //  alert('Functional: ' + propertyIRI);
+                        updateNode(propertyId, { functional: true });
+                    }
+
+
+                    // Check if the property is transitive
+                    const transitiveProperty = store.each(prop, rdfType, owlTransitive);
+                    if (transitiveProperty.length > 0) {
+                        //  alert('Transitive: ' + propertyIRI);
+                        updateNode(propertyId, { transitive: true });
+                    }
+                    // Check if the property is inverse functional
+
+                    const inverseFunctionalProperty = store.each(prop, rdfType, owlInverseFunctional);
+                    if (inverseFunctionalProperty.length > 0) {
+                        //   alert('Inverse Functional: ' + propertyIRI);
+                        updateNode(propertyId, { inverseFunctional: true });
+                    }
+
+                    const symmetricProperty = store.each(prop, rdfType, owlSymmetric);
+                    if (symmetricProperty.length > 0) {
+                        //alert('Symmetric: ' + propertyIRI);
+                        updateNode(propertyId, { symmetric: true });
+                    }
+
+                    const asymmetricProperty = store.each(prop, rdfType, owlAsymmetric);
+                    if (asymmetricProperty.length > 0) {
+                        //alert('Asymmetric: ' + propertyIRI);
+                        updateNode(propertyId, { asymmetric: true });
+                    }
+
+                    const reflexiveProperty = store.each(prop, rdfType, owlReflexive);
+                    if (reflexiveProperty.length > 0) {
+                        //alert('Reflexive: ' + propertyIRI);
+                        updateNode(propertyId, { reflexive: true });
+                    }
+
+                    const irreflexiveProperty = store.each(prop, rdfType, owlIrreflexive);
+                    if (irreflexiveProperty.length > 0) {
+                        //alert('Irreflexive: ' + propertyIRI);
+                        updateNode(propertyId, { irreflexive: true });
+                    }
+
+                })
+
+            }
+
+            // Create nodes for each datatype with their IRI and label
+            const datatypeNodes = datatypeIRIs.map(iri => ({
+                id: iri,
+                label: iri.split('#').pop(),  // Use the fragment of the IRI (e.g., "string" from xsd:string)
+                type: 'Datatype',
+                parent: iri.split('#')[0]
+            }));
+
+            // Loop through each datatype and call createNode
+            datatypeNodes.forEach(node => {
+                const label = node.label; // Extract the label from the IRI
+                const type = node.type; // All nodes are of type "Datatype"
+                const id = node.id;
+                const parent = node.parent
+                createNode(node.id, node.label, 'datatype', node.id, node.parent);
+
+            });
+
+            const datatypeProperties = store.each(null, rdfType, owlDatatypeProperty);
+            //alert(datatypeProperties.length)
+            const dataPropertiesSelect = document.getElementById('dataPropertiesSelect');
+            if (datatypeProperties.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucun dataTypeProperty  trouvé !";
+                dataPropertiesSelect.appendChild(option);
+            } else {
+                datatypeProperties.forEach(datatypeProperty => {
+                    const option = document.createElement('option');
+                    option.textContent = datatypeProperty.value;
+                    dataPropertiesSelect.appendChild(option);
+
+                    const label = getLabelFromIRI(datatypeProperty.value);
+                    const nodeId = datatypeProperty.value;
+                    if (!uniqueNodeIds.has(nodeId)) {
+                        uniqueNodeIds.add(nodeId);
+                        createNode(nodeId, label, 'datatypeproperty', datatypeProperty.value, 'OWLDatatypeProperty');
+                    }
+                    const functionalProperty = store.each(datatypeProperty, rdfType, owlFunctional);
+                    if (functionalProperty.length > 0) {
+                        //  alert('Functional: ' + propertyIRI);
+                        updateNode(nodeId, { functional: true });
+                    }
+
+                })
+            }
+
+
+            //NamedIndividuals OWL
+            const namedIndividuals = store.each(null, rdfType, namedIndividual);
+            const namedIndividualsSelect = document.getElementById('namedIndividualsSelect');
+            // Vérifier qu'au moins un individu nommé (NamedIndividual) est défini
+            if (namedIndividuals.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucun individu nommé trouvé !";
+                namedIndividualsSelect.appendChild(option);
+            } else {
+                namedIndividuals.forEach(individual => {
+                    const option = document.createElement('option');
+                    option.textContent = individual.value;
+                    namedIndividualsSelect.appendChild(option);
+
+                    const label = getLabelFromIRI(individual.value);
+                    const nodeId = individual.value;
+                    if (!uniqueNodeIds.has(nodeId)) {
+                        uniqueNodeIds.add(nodeId);
+                        createNode(nodeId, label, 'individual', individual.value, 'OWLIndividual');
+                    }
+                });
+            }
+
+            // Gestion de l'affichage des relations `isa` entre individus et classes
+            const isaSelect = document.getElementById('isaRelationsSelect');
+            if (namedIndividuals.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucun individu typé trouvé !";
+                isaSelect.appendChild(option);
+            } else {
+                namedIndividuals.forEach(individual => {
+                    // Trouver toutes les classes associées à cet individu via rdf:type
+                    const relatedClasses = store.each(individual, rdfType, null);
+                    relatedClasses.forEach(cls => {
+                        // Vérifier si la classe est une vraie classe OWL
+                        if (store.holds(cls, rdfType, owlClass)) {
+                            // Ajouter la relation dans l'interface
+                            const option = document.createElement('option');
+                            option.textContent = `${individual.value}->${cls.value}`;
+                            isaSelect.appendChild(option);
+
+                            // Créer des noeuds ou connexions dans votre graphe
+                            const individualLabel = getLabelFromIRI(individual.value);
+                            const classLabel = getLabelFromIRI(cls.value);
+                            createEdge(ULID.ulid(), "isa", individual.value, cls.value, 'isa');
+
+                        }
+                    });
+                });
+            }
+
+            // Sous classes
+            var classSubsumption
+            classes.forEach(classe => {
+
+                //const classSubsumption = store.statementsMatching(null, rdfsSubClassOf, null);
+                const classSubsumptionSelect = document.getElementById('classSubsumptionSelect');
+                // Recherchez les définitions de sous classes spécifiques à cette classe
+                const subclasses = store.statementsMatching(classe, rdfsSubClassOf, null);
+                if (subclasses.length === 0) {
+                } else {
+                    subclasses.forEach(subclass => {
+                        const option = document.createElement('option');
+                        option.textContent = `${classe.value} ⊆ ${subclass.object.value}`;
+                        classSubsumptionSelect.appendChild(option);
+
+                        const subjectId = classe.value;
+                        const objectId = subclass.object.value; // Subclass target is the object
+                        const edgeId = `${subjectId}-subclassof->${objectId}`;
+                        if (!edges.some(edge => edge.data.id === edgeId)) { // Avoid duplicate edges
+                            // function createEdge(id, label, source, target, type)
+                            createEdge(edgeId, "", subjectId, objectId, 'subClass');
+                        }
+                    });
+                }
+                // Equivalences de classes
+                const equivalentClasses = store.statementsMatching(classe, owlEquivalentClass, null);
+
+                // Traitez les propriétés équivalentes trouvées
+                equivalentClasses.forEach(equivalentclass => {
+                    const option = document.createElement('option');
+                    option.textContent = `${classe.value} ≡ ${equivalentclass.object.value}`;
+                    classEquivalenceSelect.appendChild(option);
+
+                    const subjectId = classe.value
+                    const objectId = equivalentclass.object.value;
+                    const edgeId = `${subjectId}-equivalentclass-${objectId}`;
+                    createEdge(edgeId, "≡", subjectId, objectId, 'equivalentProperty');
+                    //createEdge(id, label, source, target, type)
+                    processEquivalence(subjectId, objectId, "OWLClass")
+                });
+
+
+            });
+
+            const propertyEquivalenceSelect = document.getElementById('propertyEquivalenceSelect');
+            objectProperties.forEach(property => {
+
+                // Equivalences de propriété
+                const equivalentProperties = store.statementsMatching(property, owlEquivalentProperty, null);
+
+                // Traitez les propriétés équivalentes trouvées
+                equivalentProperties.forEach(equivalentproperty => {
+                    // Skip owl:topObjectProperty
+                    const option = document.createElement('option');
+                    option.textContent = `${property.value} ≡ ${equivalentproperty.object.value}`;
+                    propertyEquivalenceSelect.appendChild(option);
+
+                    const subjectId = property.value
+                    const objectId = equivalentproperty.object.value;
+                    const edgeId = `${subjectId}-equivalentproperty-${objectId}`;
+                    createEdge(edgeId, '≡', subjectId, objectId, 'equivalentProperty');
+                    processEquivalence(subjectId, objectId, "OWLProperty")
+                });
+
+                // Sous Propriétés
+                const owlTopProperty = 'http://www.w3.org/2002/07/owl#topObjectProperty';
+                const propertySubsumptionSelect = document.getElementById('propertySubsumptionSelect');
+
+                const subproperties = store.statementsMatching(property, rdfsSubPropertyOf, null);
+
+                subproperties.forEach(subproperty => {
+                    // Skip owl:topObjectProperty
+                    if (subproperty.object.value === owlTopProperty) {
+                        return;
+                    }
+                    const option = document.createElement('option');
+                    option.textContent = `${property.value} ⊑ ${subproperty.object.value}`;
+                    propertySubsumptionSelect.appendChild(option);
+
+                    const subjectId = property.value
+                    const objectId = subproperty.object.value;
+                    const edgeId = `${subjectId}-subpropertyof-${objectId}`;
+                    createEdge(edgeId, "", subjectId, objectId, 'subProperty');
+                });
+
+
+                // Relations d'inverse entre propriétés
+                const propertyInverseSelect = document.getElementById('propertyInverseSelect');
+                const inverseProperties = store.statementsMatching(property, owlInverseProperty, null);
+
+                inverseProperties.forEach(inverseProperty => {
+                    // Créez une option dans le sélecteur
+                    const option = document.createElement('option');
+                    option.textContent = `${property.value} ⟲ ${inverseProperty.object.value}`;
+                    propertyInverseSelect.appendChild(option);
+
+                    // Créez une arête pour représenter la relation inverse dans un graphe
+                    const subjectId = property.value;
+                    const objectId = inverseProperty.object.value;
+                    const edgeId = `${subjectId}-inverseproperty-${objectId}`;
+                    createEdge(edgeId, "", subjectId, objectId, 'inverseProperty');
+                });
+
+            });
+
+            //domaines
+            const domainsSelect = document.getElementById('domainsSelect');
+            const domains = [];
+            const domainHash = {}; // The domain hashtable
+
+            const domainStatements = store.statementsMatching(null, rdfsDomain, null);
+            domainStatements.forEach(domainClass => {
+                if (domainStatements.length === 0) {
+                    const option = document.createElement('option');
+                    option.textContent = "Aucune définition de domaine trouvée !";
+                    domainsSelect.appendChild(option);
+                } else {
+                    const option = document.createElement('option');
+                    const subject = domainClass.subject.value;
+                    const predicate = domainClass.predicate.value;
+                    const object = domainClass.object.value;
+                    option.textContent = `${subject}--${predicate}-->${object}`;
+                    domainsSelect.appendChild(option);
+
+                    // Ajouter une arête entre la propriété et la classe de domaine
+                    const subjectId = domainClass.subject.value;
+                    const objectId = domainClass.object.value;
+                    const edgeId = `${subjectId}-domain-${objectId}`;
+                    // Update hashtable with Sets
+                    if (!domainHash[subject]) {
+                        domainHash[subject] = new Set();
+                    }
+                    domainHash[subject].add(object);
+                    // console.log(`I'm creating an edge with ${subjectId} as source and ${objectId} as edge`)
+                    //   createEdge(edgeId, "", subjectId, objectId, 'domain');
+                    //   createEdge(edgeId, "", subjectId + "_domain", objectId, 'domain');
+
+                }
+            });
+
+            //range
+            const rangesSelect = document.getElementById('rangesSelect');
+            const ranges = [];
+            const rangeHash = {}; // The range hashtable
+            const rangeStatements = store.statementsMatching(null, rdfsRange, null);
+            rangeStatements.forEach(rangeClass => {
+
+                if (rangeStatements.length === 0) {
+                    const option = document.createElement('option');
+                    option.textContent = "Aucune définition de portée trouvée !";
+                    rangesSelect.appendChild(option);
+                } else {
+                    const option = document.createElement('option');
+                    const subject = rangeClass.subject.value;
+                    const predicate = rangeClass.predicate.value;
+                    const object = rangeClass.object.value;
+                    option.textContent = `${subject}--${predicate}--> ${object}`;
+                    rangesSelect.appendChild(option);
+
+                    // Ajouter une arête entre la propriété et la classe de domaine
+                    const subjectId = rangeClass.subject.value;
+                    const objectId = rangeClass.object.value;
+                    const edgeId = `${subjectId}-range-${objectId}`;
+                    // Update hashtable with Sets
+                    if (!rangeHash[subject]) {
+                        rangeHash[subject] = new Set();
+                    }
+                    rangeHash[subject].add(object);
+                    //  createEdge(edgeId, "", subjectId, objectId, 'range');
+                    //    createEdge(edgeId, "", subjectId + "_range", objectId, 'range');
+                }
+            });
+
+
+            //relations
+            // Filtrer tous les triplets où l'objet est une ressource (qu'elle soit NamedNode ou BlankNode)
+            const objectPropertiesUsed = store.statementsMatching(null, null, null);
+
+            // Extraire les prédicats qui sont des ObjectProperties et dont l'objet est une ressource
+            const objectPropertiesSet = new Set();
+            objectPropertiesUsed.forEach(triplet => {
+                const predicate = triplet.predicate;
+                const object = triplet.object;
+
+                // Vérifier si le prédicat est un ObjectProperty
+                if (store.statementsMatching(predicate, rdfType, objectProperty).length > 0) {
+                    // Vérifier si l'objet est une ressource (NamedNode ou BlankNode)
+                    if (object.termType === 'NamedNode' || object.termType === 'BlankNode') {
+                        objectPropertiesSet.add(predicate.value); // Ajouter le prédicat à la liste des ObjectProperties utilisées
+                    }
+                }
+            });
+
+
+            //Chaines de propriétés
+            // Extract property chains from RDF
+            const propertyChains = extractPropertyChains(store);
+            generateGraphFromPropertyChains(propertyChains);
+
+
+            //Annotations
+
+            //Create nodes for usual annotation properties as proposed in Protégé by default
+
+            annotationProperties.forEach(prop => {
+                createNode(prop, getLabelFromIRI(prop), 'annotationproperty', "", 'defaultOWLAnnotationProperty');
+
+                cy.add({
+                    group: 'nodes',
+                    data: { id: prop, label: prop.split('#').pop() } // Extracts the last part of the URI as a label
+                });
+            });
+            // Find all properties explicitly declared as owl:AnnotationProperty
+            store.match(undefined, rdfType, annotationProperty).forEach(triple => {
+                console.log("createListOfOWLAnnotation" + triple)
+                var label = getLabelFromIRI(triple.subject.value);
+                //alert("Add annotationPropety:" + triple.subject.value)
+                annotationProperties.add(triple.subject.value)
+                createNode(triple.subject.value, label, 'annotationproperty', triple.subject.value, 'OWLAnnotationProperty');
+            });
+
+            console.log([...annotationProperties]);
+            //Extract annotations from RDF
+            const annotations = extractAnnotations(store, annotationProperties);
+            generateGraphFromAnnotations(annotations);
+
+
+            //typed links between individual
+            const individualRelationsSelect = document.getElementById('individualRelationsSelect');
+            const individualRelations = [];
+            // Afficher toutes les ObjectProperties utilisées dans les relations entre individus
+            objectPropertiesSet.forEach(pred => {
+                // Relations entre individus : Extraction simple des triplets
+                const myProperty = $rdf.namedNode(pred);
+                const myPropertyInstances = store.statementsMatching(null, myProperty, null);
+                if (myPropertyInstances.length === 0) {
+                    const option = document.createElement('option');
+                    option.textContent = "Aucune relation de type " + pred + " entre individus trouvée !";
+                    individualRelationsSelect.appendChild(option);
+                } else {
+                    myPropertyInstances.forEach(relation => {
+                        const option = document.createElement('option');
+                        const subject = relation.subject.value;
+                        const predicate = relation.predicate.value;
+                        const object = relation.object.value;
+                        option.textContent = `${subject}--${predicate}-->${object}`;
+                        individualRelationsSelect.appendChild(option);
+
+                        const objectId = object;
+                        const subjectId = subject;
+                        const predicateId = predicate;
+
+                        const edgeId = `${subjectId}-${predicateId}->${objectId}`
+                        createEdge(edgeId, predicate, subjectId, objectId, 'relation');
+                    });
+                }
+            });
+
+            //initialisation du graphe
+            cy.elements().remove();
+            createNode("http://www.w3.org/2002/07/owl#Thing", "Thing", "individual", "http://www.w3.org/2002/07/owl#Thing", "OWLIndividual")
+            createNode("http://www.w3.org/2002/07/owl#Nothing", "Nothing", "individual", "http://www.w3.org/2002/07/owl#Nothing", "OWLIndividual")
+            cy.add(nodes);
+            updatePropertyNodesWithExistingDomainsAndRangesInGraph(cy, domainHash, rangeHash)
+            edges.forEach(edge => {
+                try {
+                    // Add the edge directly using its existing data
+                    cy.add({
+                        group: 'edges',
+                        data: edge.data,
+                        classes: edge.classes
+                    });
+                } catch (error) {
+                    // console.warn(`Error adding edge ${edge.data.id}: ${error.message}`);
+                    // Check and create missing source node
+                    console.log(edge.data)
+                    if (cy.getElementById(edge.data.source).length === 0) {
+                        var parent = getPathFromIRI(edge.data.source)
+                        cy.add({
+                            group: 'nodes',
+                            data: {
+                                id: edge.data.source,
+                                label: getLabelFromIRI(edge.data.source),
+                                parent: parent,
+                            },
+                            classes: getOWLTypeFromPredicate(edge.classes, "subject")
+                        });
+                        console.log("2349 blank source: " + edge.data.source)
+                    }
+
+                    // Check and create missing target node
+                    if (cy.getElementById(edge.data.target).length === 0) {
+                        var parent = getPathFromIRI(edge.data.target);
+                        cy.add({
+                            group: 'nodes',
+                            data: {
+                                id: edge.data.target,
+                                label: getLabelFromIRI(edge.data.target),
+                                parent: parent// "http://data.europa.eu/m8g"
+                            },
+                            classes: getOWLTypeFromPredicate(edge.classes, "object")
+                        });
+                        console.log(`2365 Blank target: ${edge.data.target}`);
+                        console.log(`2365 Parent: ${parent}`);
+                    }
+
+                    // Retry adding the edge now that nodes exist
+                    try {
+                        cy.add({
+                            group: 'edges',
+                            data: edge.data,
+                            classes: edge.classes
+                        });
+                    } catch (retryError) {
+                        console.log(`Failed again to add edge ${edge.data.id}:`, retryError);
+                    }
+
+                }
+            });
+            // Déplier tout au chargement
+            api.expandAll();
+            api.collapseAllEdges(getEdgeOptions())
+            //  cy.layout({ name: 'fcose', animate: true }).run();
+            console.log("Ontology successfully imported into Cytoscape!");
+
+
+        }
+        console.log(OntologyViewerStyle)
+        var cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: [], // Ajoutez vos éléments ici
+            style: OntologyViewerStyle,
+            layout: {
+                name: 'fcose',
+                animate: true
+            }
+        });
+        // Ajout des plugins
+        var ur = cy.undoRedo();
+
+        var api = cy.expandCollapse({
+            layoutBy: { name: 'fcose', animate: true },
+            fisheye: true,
+            animate: 'end',
+            undoable: true
+        });
+
+        document.getElementById("classEquivalenceSelect").addEventListener("focus", function (event) {
+            event.stopPropagation();
+            let selectedOption = event.target.value;
+            console.log("select focus on: " + selectedOption);
+            // Here you can launch an action, like opening a side panel
+        });
+        document.getElementById("classEquivalenceSelect").addEventListener("blur", function (event) {
+            event.stopPropagation();
+            let selectedOption = event.target.value;
+            console.log("lost focus on: " + selectedOption);
+            // Here you can launch an action, like opening a side panel
+        });
+        document.getElementById("classEquivalenceSelect").addEventListener("dblclick", function (event) {
+            let selectedOption = event.target.value;
+            alert("You double-clicked: " + selectedOption);
+            // Here you can launch an action, like opening a side panel
+        });
+        document.getElementById("classEquivalenceSelect").addEventListener("click", function (event) {
+            let selectedOption = event.target.value;
+            alert("you clicked: " + selectedOption);
+            // Here you can launch an action, like opening a side panel
+        });
+        document.getElementById("classEquivalenceSelect").addEventListener("touchend", function (event) {
+            let selectedOption = event.target.value;
+            console.log("Tapped on: " + selectedOption);
+            // Here you can launch an action, like opening a side panel
+        });
+
+        cy.on('mousedown', 'node', (event) => {
+            const node = event.target;
+            if (node.data('type') === 'property') {
+                showTemporaryDomainRangeEdges(node, cy);
+            }
+        });
+
+        cy.on('mouseup', () => {
+            removeTemporaryEdges(cy);
+        });
+        cy.on('add', 'node, edge', (event) => {
+            makePopper(event.target);
+        });
+        cy.on('mouseover', 'node, edge', (event) => {
+            if (event.target.tippy) event.target.tippy.show();
+        });
+        cy.on('drag', 'node, edge', (event) => {
+            if (event.target.tippy) event.target.tippy.popperInstance.update();
+        });
+        cy.on('mouseout', 'node, edge', (event) => {
+            if (event.target.tippy) event.target.tippy.hide();
+        });
+        //   cy.on("expandcollapse.afterexpand", function(event) {  api.collapseAllEdges(getEdgeOptions()) })
+
+        // Event listener for node or edge click
+        cy.on('tap', 'node, edge', function (event) {
+            var target = event.target;
+
+
+            // Display the info panel
+            var infoPanel = document.getElementById('infoPanel');
+            infoPanel.style.display = 'block';
+
+            // Create an HTML string for the data to be displayed
+            var infoHtml = '';
+
+            if (target.isNode()) {
+                const CompoundNodeRelatedKeys = [
+                    'expandcollapseRenderedStartX', 'expandcollapseRenderedStartY',
+                    'expandcollapseRenderedCueSize',
+                    'collapse',
+                    'position-before-collapse',
+                    'size-before-collapse',
+                    'collapsedChildren',
+                    'x-before-fisheye',
+                    'y-before-fisheye',
+                    'width-before-fisheye',
+                    'height-before-fisheye',
+                    'infoLabel'
+                ];
+
+                infoHtml += '<strong>Node Information</strong><br>';
+                // Loop through node data and display as name: value
+                var nodeData = target.data();
+                for (var key in nodeData) {
+                    if (nodeData.hasOwnProperty(key) && !CompoundNodeRelatedKeys.includes(key)) {
+                        infoHtml += '<strong>' + key + '</strong>: ' + nodeData[key] + '<br>';
+                    }
+                }
+            } else if (target.isEdge()) {
+                infoHtml += '<strong>Edge Information</strong><br>';
+
+                // Loop through edge data and display as name: value
+                var edgeData = target.data();
+                const CompoundEdgeRelatedKeys = [
+                    'collapsedEdges',
+                    'edgeType',
+                    'directionType',
+                    'originalEnds'
+                ];
+                for (var key in edgeData) {
+                    if (edgeData.hasOwnProperty(key) && !CompoundEdgeRelatedKeys.includes(key)) {
+                        infoHtml += key + ': ' + edgeData[key] + '<br>';
+                    }
+                }
+            }
+
+            // Update the panel content
+            infoPanel.innerHTML = infoHtml;
+
+            // Event listener for clicking outside the node or edge
+            document.addEventListener('click', function outsideClickListener(e) {
+                // Check if the click is outside the info panel or target (node or edge)
+                if (!infoPanel.contains(e.target) && !target.contains(e.target)) {
+                    infoPanel.style.display = 'none';
+                    document.removeEventListener('click', outsideClickListener);
+                }
+            });
+        });
+        // Event listener for double-click on the Cy container (to hide the panel)
+        cy.container().addEventListener('dblclick', function (event) {
+            // Check if the double-click is outside of any node or edge
+            infoPanel.style.display = 'none';
+            api.collapseAllEdges(getEdgeOptions())
+
+        });
+        updateTabsTranslations()
+
+        //// Loading files
+        document.getElementById('load-from-inp').addEventListener('change', function () {
+            readTxtFile(this.files[0], function (txt) {
+                w2confirm('Do you want to replace? If yes, current graph will be removed, if no, it will be fusionned with the import)')
+                    .yes(() => {
+                        cy.$().remove();
+                        api.loadJson(txt);
+                        api.collapseAll();
+                        api.collapseAllEdges(getEdgeOptions());
+                    })
+                    .no(() => {
+                        api.loadJson(txt);
+                        api.collapseAll();
+                        api.collapseAllEdges(getEdgeOptions());
+                    });
+            })
+        });
+
+    </script>
+</body>
+
+</html>
